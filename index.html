@@ -1,0 +1,190 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>arebry</title>
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;800&display=swap');
+
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+
+  body {
+    background: #0a0a0f;
+    color: #e8e4df;
+    font-family: 'Inter', sans-serif;
+    height: 100vh;
+    overflow: hidden;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+  }
+
+  canvas {
+    position: fixed;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    z-index: 0;
+  }
+
+  .content {
+    position: relative;
+    z-index: 1;
+    text-align: center;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 2.4rem;
+  }
+
+  h1 {
+    font-weight: 800;
+    font-size: clamp(3.2rem, 12vw, 8rem);
+    letter-spacing: -0.03em;
+    line-height: 1;
+    color: #f0ece6;
+    user-select: none;
+  }
+
+  .links {
+    display: flex;
+    gap: 1.6rem;
+    flex-wrap: wrap;
+    justify-content: center;
+  }
+
+  .links a {
+    color: #807b74;
+    text-decoration: none;
+    font-weight: 300;
+    font-size: clamp(0.85rem, 2.5vw, 1rem);
+    letter-spacing: 0.04em;
+    padding: 0.3rem 0;
+    border-bottom: 1px solid transparent;
+    transition: color 0.3s, border-color 0.3s;
+  }
+
+  .links a:hover {
+    color: #c8c2b8;
+    border-bottom-color: #c8c2b830;
+  }
+
+  .dot {
+    color: #3a3832;
+    font-size: clamp(0.6rem, 1.5vw, 0.75rem);
+    user-select: none;
+    align-self: center;
+  }
+</style>
+</head>
+<body>
+<canvas id="bg"></canvas>
+<div class="content">
+  <h1>arebry</h1>
+  <nav class="links">
+    <a href="https://nemi.tech" target="_blank" rel="noopener">nemi.tech</a>
+    <span class="dot">&middot;</span>
+    <a href="https://postalviviente.com" target="_blank" rel="noopener">postalviviente.com</a>
+  </nav>
+</div>
+<script>
+(function () {
+  const canvas = document.getElementById('bg');
+  const ctx = canvas.getContext('2d');
+  let w, h, particles, mouse;
+
+  function resize() {
+    const dpr = Math.min(window.devicePixelRatio || 1, 2);
+    w = canvas.width = window.innerWidth * dpr;
+    h = canvas.height = window.innerHeight * dpr;
+    canvas.style.width = window.innerWidth + 'px';
+    canvas.style.height = window.innerHeight + 'px';
+    ctx.scale(dpr, dpr);
+  }
+
+  function init() {
+    resize();
+    mouse = { x: window.innerWidth / 2, y: window.innerHeight / 2 };
+    const count = Math.min(Math.floor((window.innerWidth * window.innerHeight) / 6000), 200);
+    particles = [];
+    for (let i = 0; i < count; i++) {
+      particles.push({
+        x: Math.random() * window.innerWidth,
+        y: Math.random() * window.innerHeight,
+        vx: (Math.random() - 0.5) * 0.25,
+        vy: (Math.random() - 0.5) * 0.25,
+        r: Math.random() * 1.4 + 0.4,
+        alpha: Math.random() * 0.35 + 0.08,
+      });
+    }
+  }
+
+  function draw() {
+    const vw = window.innerWidth;
+    const vh = window.innerHeight;
+    ctx.clearRect(0, 0, vw, vh);
+
+    for (let i = 0; i < particles.length; i++) {
+      const p = particles[i];
+
+      // drift
+      p.x += p.vx;
+      p.y += p.vy;
+
+      // subtle mouse attraction
+      const dx = mouse.x - p.x;
+      const dy = mouse.y - p.y;
+      const dist = Math.sqrt(dx * dx + dy * dy);
+      if (dist < 220) {
+        const force = (220 - dist) / 220 * 0.003;
+        p.vx += dx * force;
+        p.vy += dy * force;
+      }
+
+      // dampen
+      p.vx *= 0.995;
+      p.vy *= 0.995;
+
+      // wrap
+      if (p.x < -10) p.x = vw + 10;
+      if (p.x > vw + 10) p.x = -10;
+      if (p.y < -10) p.y = vh + 10;
+      if (p.y > vh + 10) p.y = -10;
+
+      ctx.beginPath();
+      ctx.arc(p.x, p.y, p.r, 0, Math.PI * 2);
+      ctx.fillStyle = 'rgba(200,194,184,' + p.alpha + ')';
+      ctx.fill();
+
+      // draw connections
+      for (let j = i + 1; j < particles.length; j++) {
+        const q = particles[j];
+        const ddx = p.x - q.x;
+        const ddy = p.y - q.y;
+        const d = ddx * ddx + ddy * ddy;
+        if (d < 8100) { // 90px
+          ctx.beginPath();
+          ctx.moveTo(p.x, p.y);
+          ctx.lineTo(q.x, q.y);
+          ctx.strokeStyle = 'rgba(200,194,184,' + (0.06 * (1 - d / 8100)) + ')';
+          ctx.lineWidth = 0.5;
+          ctx.stroke();
+        }
+      }
+    }
+
+    requestAnimationFrame(draw);
+  }
+
+  window.addEventListener('resize', () => { resize(); });
+  window.addEventListener('mousemove', (e) => { mouse.x = e.clientX; mouse.y = e.clientY; });
+  window.addEventListener('touchmove', (e) => { mouse.x = e.touches[0].clientX; mouse.y = e.touches[0].clientY; }, { passive: true });
+
+  init();
+  draw();
+})();
+</script>
+</body>
+</html>
