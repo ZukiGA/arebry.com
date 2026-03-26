@@ -251,7 +251,7 @@
         const r6 = ratio * ratio * ratio * ratio * ratio * ratio;
         const r12 = r6 * r6;
         // F = 24ε/r * [2(σ/r)^12 - (σ/r)^6] — negative = attract, positive = repel
-        const F = LJ_EPSILON * (r12 - r6) / clamped;
+        const F = LJ_EPSILON * (r6 - r12) / clamped;
         vx += (dx / d) * F * dt;
         vy += (dy / d) * F * dt;
       }
