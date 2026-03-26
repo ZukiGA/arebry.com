@@ -241,21 +241,22 @@
       let vx = (n.x - n.px) * DAMPING;
       let vy = (n.y - n.py) * DAMPING;
 
-      // 1. LENNARD-JONES POTENTIAL (replaces gravity + separation)
-      // Attracts at long range, repels at short range, equilibrium at sigma
+      // 1. LENNARD-JONES (WCA — repulsive only, truncated at equilibrium)
+      // Prevents clumping without causing collapse
       for (let j = 0; j < nodes.length; j++) {
         if (j === i) continue;
         const m = nodes[j];
         const dx = m.x - n.x, dy = m.y - n.y;
         const d = Math.sqrt(dx*dx + dy*dy) || 1;
-        const clamped = Math.max(d, LJ_SIGMA * 0.4); // prevent extreme forces
-        const ratio = LJ_SIGMA / clamped;
-        const r6 = ratio * ratio * ratio * ratio * ratio * ratio;
-        const r12 = r6 * r6;
-        // F = 24ε/r * [2(σ/r)^12 - (σ/r)^6] — negative = attract, positive = repel
-        const F = LJ_EPSILON * (r6 - r12) / clamped;
-        vx += (dx / d) * F * dt;
-        vy += (dy / d) * F * dt;
+        if (d < LJ_SIGMA) { // only repel when closer than sigma
+          const clamped = Math.max(d, LJ_SIGMA * 0.3);
+          const ratio = LJ_SIGMA / clamped;
+          const r6 = ratio * ratio * ratio * ratio * ratio * ratio;
+          const r12 = r6 * r6;
+          const F = LJ_EPSILON * (r12 - r6) / clamped;
+          vx -= (dx / d) * F * dt;
+          vy -= (dy / d) * F * dt;
+        }
       }
 
       // 2. CURL NOISE FLOW
