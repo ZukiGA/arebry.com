@@ -85,17 +85,47 @@
   const seedStart = seed;
   function rng() { seed = (seed * 16807) % 2147483647; return (seed & 0x7fffffff) / 2147483647; }
 
-  // --- Simple noise function (layered sine waves) ---
-  function noise(x, y, z) {
-    // Combine many incommensurate frequencies for unpredictable motion
-    return (
-      Math.sin(x * 1.0 + y * 0.7 + z * 0.3) * 0.30 +
-      Math.sin(x * 2.3 - y * 1.1 + z * 0.7) * 0.25 +
-      Math.sin(x * 0.5 + y * 3.1 - z * 1.2) * 0.20 +
-      Math.sin(x * 4.1 - y * 0.3 + z * 2.8) * 0.12 +
-      Math.sin(x * 0.2 + y * 5.7 + z * 0.1) * 0.08 +
-      Math.sin(x * 7.3 + y * 0.9 - z * 3.1) * 0.05
+  // --- Simplex 2D noise (never repeats) ---
+  const PERM = new Uint8Array(512);
+  const GRAD = [[1,1],[-1,1],[1,-1],[-1,-1],[1,0],[-1,0],[0,1],[0,-1]];
+  (function buildPerm() {
+    const p = new Uint8Array(256);
+    for (let i = 0; i < 256; i++) p[i] = i;
+    // Fisher-Yates with our seeded rng
+    for (let i = 255; i > 0; i--) {
+      const j = Math.floor(rng() * (i + 1));
+      const tmp = p[i]; p[i] = p[j]; p[j] = tmp;
+    }
+    for (let i = 0; i < 512; i++) PERM[i] = p[i & 255];
+  })();
+
+  function simplex2(x, y) {
+    const F2 = 0.5 * (Math.sqrt(3) - 1);
+    const G2 = (3 - Math.sqrt(3)) / 6;
+    const s = (x + y) * F2;
+    const i = Math.floor(x + s), j = Math.floor(y + s);
+    const t = (i + j) * G2;
+    const x0 = x - (i - t), y0 = y - (j - t);
+    const i1 = x0 > y0 ? 1 : 0, j1 = x0 > y0 ? 0 : 1;
+    const x1 = x0 - i1 + G2, y1 = y0 - j1 + G2;
+    const x2 = x0 - 1 + 2 * G2, y2 = y0 - 1 + 2 * G2;
+    const ii = i & 255, jj = j & 255;
+    function contrib(tx, ty, gi) {
+      const t0 = 0.5 - tx * tx - ty * ty;
+      if (t0 < 0) return 0;
+      const g = GRAD[gi & 7];
+      return t0 * t0 * t0 * t0 * (g[0] * tx + g[1] * ty);
+    }
+    return 70 * (
+      contrib(x0, y0, PERM[ii + PERM[jj]]) +
+      contrib(x1, y1, PERM[ii + i1 + PERM[jj + j1]]) +
+      contrib(x2, y2, PERM[ii + 1 + PERM[jj + 1]])
     );
+  }
+
+  // Fractal noise — 2 octaves for organic feel
+  function noise2(x, y) {
+    return simplex2(x, y) * 0.7 + simplex2(x * 2.0, y * 2.0) * 0.3;
   }
 
   // --- Mouse state ---
@@ -112,8 +142,8 @@
       bgParticles.push({
         x: Math.random() * W,
         y: Math.random() * H,
-        vx: (Math.random() - 0.5) * 0.5,
-        vy: (Math.random() - 0.5) * 0.5,
+        vx: (Math.random() - 0.5) * 0.08,
+        vy: (Math.random() - 0.5) * 0.08,
         r: Math.random() * 1.2 + 0.3,
         alpha: Math.random() * 0.2 + 0.05,
         noiseOff: Math.random() * 1000,
@@ -143,19 +173,19 @@
         vx: 0, vy: 0,
         r: 2 + rng() * 4,
         phase: rng() * Math.PI * 2,
-        speed: 0.003 + rng() * 0.012,
+        speed: 0.0006 + rng() * 0.002,
         brightness: 0.3 + rng() * 0.7,
         dragged: false,
-        // Noise-based wander with large radius
-        noiseOffX: rng() * 500,
-        noiseOffY: rng() * 500,
-        noiseSpeed: 0.00006 + rng() * 0.00012,
-        wanderRadius: 40 + rng() * 80,
-        // Slow base drift
+        // Noise-based wander — each node samples unique region of noise space
+        noiseOffX: rng() * 300 + 100,
+        noiseOffY: rng() * 300 + 100,
+        noiseSpeed: 0.000008 + rng() * 0.000015,
+        wanderRadius: 20 + rng() * 35,
+        // Very slow base drift
         driftAngle: rng() * Math.PI * 2,
-        driftSpeed: 0.002 + rng() * 0.006,
-        driftChangeSpeed: 0.00003 + rng() * 0.00006,
-        driftOff: rng() * 500,
+        driftSpeed: 0.0003 + rng() * 0.0008,
+        driftChangeSpeed: 0.000005 + rng() * 0.00001,
+        driftOff: rng() * 300 + 200,
       });
     }
 
@@ -170,7 +200,7 @@
           edges.push({
             a: i, b: j, restLength: d,
             pulseOffset: rng() * Math.PI * 2,
-            pulseSpeed: 0.0008 + rng() * 0.002,
+            pulseSpeed: 0.0002 + rng() * 0.0004,
             particles: [rng(), rng() * 0.5 + 0.5],
           });
         }
@@ -192,7 +222,7 @@
         const a = Math.min(i, closest), b = Math.max(i, closest);
         const dx = nodes[a].baseX - nodes[b].baseX;
         const dy = nodes[a].baseY - nodes[b].baseY;
-        edges.push({ a, b, restLength: Math.sqrt(dx * dx + dy * dy), pulseOffset: rng() * Math.PI * 2, pulseSpeed: 0.001, particles: [rng()] });
+        edges.push({ a, b, restLength: Math.sqrt(dx * dx + dy * dy), pulseOffset: rng() * Math.PI * 2, pulseSpeed: 0.0002, particles: [rng()] });
       }
     }
   }
@@ -252,15 +282,15 @@
   window.addEventListener('mouseleave', () => { mouse.active = false; });
 
   // --- Physics constants ---
-  const SPRING_K = 0.0003;
-  const DAMPING = 0.985;
-  const HOME_PULL = 0.0004;
-  const DRAG_PULL = 0.015;
-  const WANDER_STR = 0.02;
+  const SPRING_K = 0.00006;
+  const DAMPING = 0.96;
+  const HOME_PULL = 0.00008;
+  const DRAG_PULL = 0.012;
+  const WANDER_STR = 0.004;
   const FLOCK_RADIUS = 200;
-  const FLOCK_STR = 0.003;
-  const BREATH_AMP = 0.012;
-  const BREATH_SPEED = 0.0008;
+  const FLOCK_STR = 0.0005;
+  const BREATH_AMP = 0.005;
+  const BREATH_SPEED = 0.0002;
   const BG_CONNECT_DIST = 120;
   const MOUSE_BG_RADIUS = 180;
 
@@ -291,14 +321,14 @@
     ctx.clearRect(0, 0, W, H);
 
     // ============ BACKGROUND PARTICLES ============
-    const tSlow = t * 0.0001;
+    const tSlow = t * 0.00002;
     for (let i = 0; i < bgParticles.length; i++) {
       const p = bgParticles[i];
 
       // Noise-driven drift for background particles
       const nOff = p.noiseOff;
-      const nForceX = noise(p.x * 0.003 + nOff, p.y * 0.003, tSlow) * 0.04;
-      const nForceY = noise(p.x * 0.003, p.y * 0.003 + nOff, tSlow + 100) * 0.04;
+      const nForceX = noise2(p.x * 0.002 + nOff, p.y * 0.002 + tSlow) * 0.006;
+      const nForceY = noise2(p.x * 0.002 + tSlow, p.y * 0.002 + nOff) * 0.006;
       p.vx += nForceX; p.vy += nForceY;
 
       p.x += p.vx; p.y += p.vy;
@@ -314,7 +344,7 @@
         }
       }
 
-      p.vx *= 0.99; p.vy *= 0.99;
+      p.vx *= 0.97; p.vy *= 0.97;
 
       // Wrap
       if (p.x < -10) p.x = W + 10;
@@ -357,28 +387,24 @@
       if (n.dragged) continue;
       const nt = t * n.noiseSpeed;
 
-      // Noise-based wander target (unpredictable, large radius)
-      const wx = noise(nt, n.noiseOffX, 0) + noise(nt * 2.3, n.noiseOffX + 50, 10) * 0.5;
-      const wy = noise(nt, n.noiseOffY, 100) + noise(nt * 2.3, n.noiseOffY + 50, 110) * 0.5;
+      // Simplex noise wander — each node samples its own unique region
+      const wx = noise2(nt + n.noiseOffX, n.noiseOffY);
+      const wy = noise2(n.noiseOffX, nt + n.noiseOffY);
       const wtx = n.baseX + wx * n.wanderRadius;
       const wty = n.baseY + wy * n.wanderRadius;
 
-      // Variable speed: noise-modulated pull strength
-      const speedMod = 0.4 + 0.6 * (0.5 + 0.5 * noise(nt * 0.7, n.noiseOffX + 200, 50));
-      const f = dt * 0.06 * speedMod;
+      const f = dt * 0.06;
       n.vx += (wtx - n.x) * WANDER_STR * f;
       n.vy += (wty - n.y) * WANDER_STR * f;
 
       // Slow base drift — the "home" itself migrates over time
-      const driftAngle = n.driftAngle + noise(t * n.driftChangeSpeed, n.driftOff, 200) * Math.PI;
+      const driftAngle = n.driftAngle + noise2(t * n.driftChangeSpeed + n.driftOff, n.driftOff) * Math.PI;
       n.baseX += Math.cos(driftAngle) * n.driftSpeed * dt * 0.06;
       n.baseY += Math.sin(driftAngle) * n.driftSpeed * dt * 0.06;
 
       // Soft pull back toward original region (prevents drifting offscreen)
-      const origX = cx() + (n.baseX - cx()) * 0.999;
-      const origY = cy() + (n.baseY - cy()) * 0.999;
-      n.baseX = origX;
-      n.baseY = origY;
+      n.baseX += (cx() - n.baseX) * 0.0001;
+      n.baseY += (cy() - n.baseY) * 0.0001;
 
       // Very gentle home pull so nodes explore freely
       n.vx += (n.baseX - n.x) * HOME_PULL * dt * 0.06;
@@ -478,7 +504,7 @@
       // Energy particles
       if (len > 5) {
         for (const po of e.particles) {
-          const spd = 0.0003 + po * 0.0004;
+          const spd = 0.00006 + po * 0.00008;
           const prog = ((t * spd + po * Math.PI * 2) % (Math.PI * 2)) / (Math.PI * 2);
           const ex = a.x + dx * prog;
           const ey = a.y + dy * prog;
