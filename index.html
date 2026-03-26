@@ -106,11 +106,11 @@
   // === CONSTELLATION NODES ===
   const cx = () => W/2, cy = () => H/2;
   // Use full screen dimensions for spread, not just min
-  const spreadX = W * 0.4;
-  const spreadY = H * 0.4;
+  const spreadX = W * 0.55;
+  const spreadY = H * 0.55;
   // Scale node count to screen area
   const area = W * H;
-  const nodeCount = Math.max(15, Math.min(35, Math.floor(area / 15000) + Math.floor(rng() * 5)));
+  const nodeCount = Math.max(20, Math.min(40, Math.floor(area / 12000) + Math.floor(rng() * 5)));
   const nodes = [];
   for (let i = 0; i < nodeCount; i++) {
     const angle = rng() * Math.PI * 2;
