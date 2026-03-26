@@ -152,18 +152,18 @@
   }
 
   // === PHYSICS CONSTANTS (all tuned for SLOW meditative motion) ===
-  const GRAVITY_G = 0.00015;       // n-body gravitational constant
+  const GRAVITY_G = 0.00004;       // n-body gravitational constant (reduced — was collapsing)
   const GRAVITY_SOFTENING = 40;    // prevents singularity
   const CURL_STRENGTH = 0.00015;   // curl noise turbulence
   const CURL_SCALE = 0.003;        // noise sample scale
   const CURL_TIME_SCALE = 0.000015; // how fast curl field evolves
   const LORENZ_INFLUENCE = 0.00004; // strange attractor whisper
-  const BOID_SEP_RADIUS = 60;      // separation distance
-  const BOID_SEP_STR = 0.0001;     // separation force
+  const BOID_SEP_RADIUS = 120;     // separation distance (doubled)
+  const BOID_SEP_STR = 0.0004;     // separation force (4x stronger)
   const BOID_ALI_RADIUS = 150;     // alignment radius
   const BOID_ALI_STR = 0.00004;    // alignment force
   const BOID_COH_RADIUS = 200;     // cohesion radius
-  const BOID_COH_STR = 0.00002;    // cohesion force
+  const BOID_COH_STR = 0.000005;   // cohesion force (reduced)
   const VERLET_ITERATIONS = 3;     // constraint relaxation passes
   const DAMPING = 0.996;           // velocity damping
   const CENTER_PULL = 0.000008;    // very gentle pull to center
