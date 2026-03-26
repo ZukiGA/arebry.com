@@ -105,8 +105,10 @@
 
   // === CONSTELLATION NODES ===
   const cx = () => W/2, cy = () => H/2;
-  const spread = Math.min(W, H) * 0.3;
-  const nodeCount = 18 + Math.floor(rng() * 10);
+  const spread = Math.min(W, H) * 0.35;
+  // Scale node count to screen area so they don't crowd on mobile
+  const area = W * H;
+  const nodeCount = Math.max(8, Math.min(28, Math.floor(area / 25000) + Math.floor(rng() * 5)));
   const nodes = [];
   for (let i = 0; i < nodeCount; i++) {
     const angle = rng() * Math.PI * 2;
@@ -155,7 +157,7 @@
   const GRAVITY_G = 0.00004;       // n-body gravitational constant (reduced — was collapsing)
   const GRAVITY_SOFTENING = 40;    // prevents singularity
   const LJ_EPSILON = 0.00004;       // Lennard-Jones well depth
-  const LJ_SIGMA = 140;             // Lennard-Jones equilibrium distance (wider spacing)
+  const LJ_SIGMA = Math.min(W, H) * 0.12; // equilibrium distance scales with screen
   const CURL_STRENGTH = 0.00004;   // curl noise turbulence
   const CURL_SCALE = 0.003;        // noise sample scale
   const CURL_TIME_SCALE = 0.000015; // how fast curl field evolves
