@@ -105,7 +105,7 @@
 
   // === CONSTELLATION NODES ===
   const cx = () => W/2, cy = () => H/2;
-  const spread = Math.min(W, H) * 0.42;
+  const spread = Math.min(W, H) * 0.55;
   // Scale node count to screen area
   const area = W * H;
   const nodeCount = Math.max(15, Math.min(35, Math.floor(area / 15000) + Math.floor(rng() * 5)));
@@ -166,7 +166,7 @@
   const BOID_ALI_STR = 0.00001;    // alignment force
   const VERLET_ITERATIONS = 3;     // constraint relaxation passes
   const DAMPING = 0.985;           // velocity damping (stronger to slow things down)
-  const CENTER_PULL = 0.00004;     // keep constellation centered
+  const CENTER_PULL = 0.000012;     // keep constellation centered (weaker to spread more)
 
   // === DRAG STATE ===
   let dragging = null;
