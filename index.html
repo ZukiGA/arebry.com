@@ -105,10 +105,10 @@
 
   // === CONSTELLATION NODES ===
   const cx = () => W/2, cy = () => H/2;
-  const spread = Math.min(W, H) * 0.35;
-  // Scale node count to screen area so they don't crowd on mobile
+  const spread = Math.min(W, H) * 0.42;
+  // Scale node count to screen area
   const area = W * H;
-  const nodeCount = Math.max(8, Math.min(28, Math.floor(area / 25000) + Math.floor(rng() * 5)));
+  const nodeCount = Math.max(15, Math.min(35, Math.floor(area / 15000) + Math.floor(rng() * 5)));
   const nodes = [];
   for (let i = 0; i < nodeCount; i++) {
     const angle = rng() * Math.PI * 2;
@@ -341,16 +341,16 @@
 
     // --- DRAW NODES ---
     for (const n of nodes) {
-      const pulse = n.brightness * (0.4 + 0.2 * Math.sin(now * 0.0001 + n.phase));
+      const pulse = n.brightness * (0.6 + 0.3 * Math.sin(now * 0.0001 + n.phase));
       // Glow
-      const grd = ctx.createRadialGradient(n.x, n.y, 0, n.x, n.y, n.r * 4);
-      grd.addColorStop(0, 'rgba(220,216,208,' + pulse * 0.3 + ')');
-      grd.addColorStop(1, 'rgba(220,216,208,0)');
-      ctx.beginPath(); ctx.arc(n.x, n.y, n.r * 4, 0, Math.PI*2);
+      const grd = ctx.createRadialGradient(n.x, n.y, 0, n.x, n.y, n.r * 5);
+      grd.addColorStop(0, 'rgba(230,226,218,' + pulse * 0.5 + ')');
+      grd.addColorStop(1, 'rgba(230,226,218,0)');
+      ctx.beginPath(); ctx.arc(n.x, n.y, n.r * 5, 0, Math.PI*2);
       ctx.fillStyle = grd; ctx.fill();
       // Core
       ctx.beginPath(); ctx.arc(n.x, n.y, n.r, 0, Math.PI*2);
-      ctx.fillStyle = 'rgba(224,220,212,' + pulse + ')'; ctx.fill();
+      ctx.fillStyle = 'rgba(240,236,228,' + (pulse + 0.15) + ')'; ctx.fill();
     }
 
     requestAnimationFrame(frame);
