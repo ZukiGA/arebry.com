@@ -105,16 +105,18 @@
 
   // === CONSTELLATION NODES ===
   const cx = () => W/2, cy = () => H/2;
-  const spread = Math.min(W, H) * 0.55;
+  // Use full screen dimensions for spread, not just min
+  const spreadX = W * 0.4;
+  const spreadY = H * 0.4;
   // Scale node count to screen area
   const area = W * H;
   const nodeCount = Math.max(15, Math.min(35, Math.floor(area / 15000) + Math.floor(rng() * 5)));
   const nodes = [];
   for (let i = 0; i < nodeCount; i++) {
     const angle = rng() * Math.PI * 2;
-    const dist = spread * (0.15 + rng() * 0.85);
-    const x = cx() + Math.cos(angle) * dist;
-    const y = cy() + Math.sin(angle) * dist;
+    const dist = 0.15 + rng() * 0.85;
+    const x = cx() + Math.cos(angle) * spreadX * dist;
+    const y = cy() + Math.sin(angle) * spreadY * dist;
     const mass = 0.5 + rng() * 2;
     nodes.push({
       x, y, px: x, py: y, // position and previous position (Verlet)
@@ -129,7 +131,7 @@
 
   // === EDGES ===
   const edges = [];
-  const maxEdgeDist = spread * 0.7;
+  const maxEdgeDist = Math.max(spreadX, spreadY) * 0.6;
   for (let i = 0; i < nodes.length; i++) {
     for (let j = i + 1; j < nodes.length; j++) {
       const dx = nodes[i].x - nodes[j].x, dy = nodes[i].y - nodes[j].y;
