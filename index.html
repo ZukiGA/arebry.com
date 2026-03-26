@@ -292,6 +292,13 @@
       n.py = n.y;
       n.x += vx;
       n.y += vy;
+
+      // Clamp to screen with soft bounce
+      const margin = 20;
+      if (n.x < margin) { n.x = margin; n.px = n.x + vx * 0.3; }
+      if (n.x > W - margin) { n.x = W - margin; n.px = n.x + vx * 0.3; }
+      if (n.y < margin) { n.y = margin; n.py = n.y + vy * 0.3; }
+      if (n.y > H - margin) { n.y = H - margin; n.py = n.y + vy * 0.3; }
     }
 
     // 6. VERLET EDGE CONSTRAINTS (relaxation)
