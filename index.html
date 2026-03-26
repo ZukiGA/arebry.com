@@ -85,6 +85,19 @@
   const seedStart = seed;
   function rng() { seed = (seed * 16807) % 2147483647; return (seed & 0x7fffffff) / 2147483647; }
 
+  // --- Simple noise function (layered sine waves) ---
+  function noise(x, y, z) {
+    // Combine many incommensurate frequencies for unpredictable motion
+    return (
+      Math.sin(x * 1.0 + y * 0.7 + z * 0.3) * 0.30 +
+      Math.sin(x * 2.3 - y * 1.1 + z * 0.7) * 0.25 +
+      Math.sin(x * 0.5 + y * 3.1 - z * 1.2) * 0.20 +
+      Math.sin(x * 4.1 - y * 0.3 + z * 2.8) * 0.12 +
+      Math.sin(x * 0.2 + y * 5.7 + z * 0.1) * 0.08 +
+      Math.sin(x * 7.3 + y * 0.9 - z * 3.1) * 0.05
+    );
+  }
+
   // --- Mouse state ---
   let mouse = { x: -9999, y: -9999, active: false };
   let dragging = null;
@@ -99,10 +112,11 @@
       bgParticles.push({
         x: Math.random() * W,
         y: Math.random() * H,
-        vx: (Math.random() - 0.5) * 0.25,
-        vy: (Math.random() - 0.5) * 0.25,
+        vx: (Math.random() - 0.5) * 0.5,
+        vy: (Math.random() - 0.5) * 0.5,
         r: Math.random() * 1.2 + 0.3,
         alpha: Math.random() * 0.2 + 0.05,
+        noiseOff: Math.random() * 1000,
       });
     }
   }
@@ -132,10 +146,16 @@
         speed: 0.003 + rng() * 0.012,
         brightness: 0.3 + rng() * 0.7,
         dragged: false,
-        wanderSpeed: 0.0003 + rng() * 0.0008,
-        wanderRadius: 4 + rng() * 12,
-        wanderPhaseX: rng() * 1000,
-        wanderPhaseY: rng() * 1000,
+        // Noise-based wander with large radius
+        noiseOffX: rng() * 500,
+        noiseOffY: rng() * 500,
+        noiseSpeed: 0.00006 + rng() * 0.00012,
+        wanderRadius: 40 + rng() * 80,
+        // Slow base drift
+        driftAngle: rng() * Math.PI * 2,
+        driftSpeed: 0.002 + rng() * 0.006,
+        driftChangeSpeed: 0.00003 + rng() * 0.00006,
+        driftOff: rng() * 500,
       });
     }
 
@@ -232,11 +252,13 @@
   window.addEventListener('mouseleave', () => { mouse.active = false; });
 
   // --- Physics constants ---
-  const SPRING_K = 0.0004;
-  const DAMPING = 0.97;
-  const HOME_PULL = 0.003;
+  const SPRING_K = 0.0003;
+  const DAMPING = 0.985;
+  const HOME_PULL = 0.0004;
   const DRAG_PULL = 0.015;
-  const WANDER_STR = 0.08;
+  const WANDER_STR = 0.02;
+  const FLOCK_RADIUS = 200;
+  const FLOCK_STR = 0.003;
   const BREATH_AMP = 0.012;
   const BREATH_SPEED = 0.0008;
   const BG_CONNECT_DIST = 120;
@@ -269,8 +291,16 @@
     ctx.clearRect(0, 0, W, H);
 
     // ============ BACKGROUND PARTICLES ============
+    const tSlow = t * 0.0001;
     for (let i = 0; i < bgParticles.length; i++) {
       const p = bgParticles[i];
+
+      // Noise-driven drift for background particles
+      const nOff = p.noiseOff;
+      const nForceX = noise(p.x * 0.003 + nOff, p.y * 0.003, tSlow) * 0.04;
+      const nForceY = noise(p.x * 0.003, p.y * 0.003 + nOff, tSlow + 100) * 0.04;
+      p.vx += nForceX; p.vy += nForceY;
+
       p.x += p.vx; p.y += p.vy;
 
       // Mouse repulsion
@@ -284,13 +314,7 @@
         }
       }
 
-      p.vx *= 0.995; p.vy *= 0.995;
-      // Keep some minimum drift
-      const speed = Math.sqrt(p.vx * p.vx + p.vy * p.vy);
-      if (speed < 0.05) {
-        p.vx += (Math.random() - 0.5) * 0.02;
-        p.vy += (Math.random() - 0.5) * 0.02;
-      }
+      p.vx *= 0.99; p.vy *= 0.99;
 
       // Wrap
       if (p.x < -10) p.x = W + 10;
@@ -298,9 +322,11 @@
       if (p.y < -10) p.y = H + 10;
       if (p.y > H + 10) p.y = -10;
 
+      // Pulsing alpha
+      const aFlicker = p.alpha * (0.7 + 0.3 * Math.sin(t * 0.001 + nOff));
       ctx.beginPath();
       ctx.arc(p.x, p.y, p.r, 0, Math.PI * 2);
-      ctx.fillStyle = 'rgba(200,194,184,' + p.alpha + ')';
+      ctx.fillStyle = 'rgba(200,194,184,' + aFlicker + ')';
       ctx.fill();
     }
 
@@ -326,18 +352,58 @@
     const breath = 1 + Math.sin(t * BREATH_SPEED) * BREATH_AMP;
     const interactR = 200;
 
-    // Wander + home pull
+    // Noise-driven wander + slow base drift + soft home pull
     for (const n of nodes) {
       if (n.dragged) continue;
-      const wx = Math.sin(t * n.wanderSpeed + n.wanderPhaseX) * Math.cos(t * n.wanderSpeed * 0.7 + n.wanderPhaseY * 1.3);
-      const wy = Math.cos(t * n.wanderSpeed * 0.8 + n.wanderPhaseY) * Math.sin(t * n.wanderSpeed * 0.6 + n.wanderPhaseX * 0.9);
+      const nt = t * n.noiseSpeed;
+
+      // Noise-based wander target (unpredictable, large radius)
+      const wx = noise(nt, n.noiseOffX, 0) + noise(nt * 2.3, n.noiseOffX + 50, 10) * 0.5;
+      const wy = noise(nt, n.noiseOffY, 100) + noise(nt * 2.3, n.noiseOffY + 50, 110) * 0.5;
       const wtx = n.baseX + wx * n.wanderRadius;
       const wty = n.baseY + wy * n.wanderRadius;
-      const f = dt * 0.06;
+
+      // Variable speed: noise-modulated pull strength
+      const speedMod = 0.4 + 0.6 * (0.5 + 0.5 * noise(nt * 0.7, n.noiseOffX + 200, 50));
+      const f = dt * 0.06 * speedMod;
       n.vx += (wtx - n.x) * WANDER_STR * f;
       n.vy += (wty - n.y) * WANDER_STR * f;
-      n.vx += (n.baseX - n.x) * HOME_PULL * f;
-      n.vy += (n.baseY - n.y) * HOME_PULL * f;
+
+      // Slow base drift — the "home" itself migrates over time
+      const driftAngle = n.driftAngle + noise(t * n.driftChangeSpeed, n.driftOff, 200) * Math.PI;
+      n.baseX += Math.cos(driftAngle) * n.driftSpeed * dt * 0.06;
+      n.baseY += Math.sin(driftAngle) * n.driftSpeed * dt * 0.06;
+
+      // Soft pull back toward original region (prevents drifting offscreen)
+      const origX = cx() + (n.baseX - cx()) * 0.999;
+      const origY = cy() + (n.baseY - cy()) * 0.999;
+      n.baseX = origX;
+      n.baseY = origY;
+
+      // Very gentle home pull so nodes explore freely
+      n.vx += (n.baseX - n.x) * HOME_PULL * dt * 0.06;
+      n.vy += (n.baseY - n.y) * HOME_PULL * dt * 0.06;
+    }
+
+    // Flocking: nearby nodes gently pull each other along
+    for (let i = 0; i < nodes.length; i++) {
+      if (nodes[i].dragged) continue;
+      for (let j = i + 1; j < nodes.length; j++) {
+        if (nodes[j].dragged) continue;
+        const a = nodes[i], b = nodes[j];
+        const dx = b.x - a.x, dy = b.y - a.y;
+        const dist = Math.sqrt(dx * dx + dy * dy);
+        if (dist < FLOCK_RADIUS && dist > 0) {
+          const influence = (1 - dist / FLOCK_RADIUS) * FLOCK_STR;
+          // Align velocities (flocking cohesion)
+          const avgVx = (a.vx + b.vx) * 0.5;
+          const avgVy = (a.vy + b.vy) * 0.5;
+          a.vx += (avgVx - a.vx) * influence;
+          a.vy += (avgVy - a.vy) * influence;
+          b.vx += (avgVx - b.vx) * influence;
+          b.vy += (avgVy - b.vy) * influence;
+        }
+      }
     }
 
     // Spring forces
