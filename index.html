@@ -89,10 +89,8 @@
     lx += dx; ly += dy; lz += dz;
   }
 
-  // === SEEDED RNG (daily) ===
-  const seedStr = new Date().toDateString();
-  let seed = 0;
-  for (let i = 0; i < seedStr.length; i++) seed = ((seed << 5) - seed + seedStr.charCodeAt(i)) | 0;
+  // === SEEDED RNG (from timestamp — unique every visit) ===
+  let seed = Date.now() ^ (Math.random() * 0xFFFFFFFF | 0);
   function rng() { seed = (seed * 16807) % 2147483647; return (seed & 0x7fffffff) / 2147483647; }
 
   // === BACKGROUND PARTICLES ===
@@ -113,10 +111,10 @@
   const nodeCount = Math.max(20, Math.min(40, Math.floor(area / 12000) + Math.floor(rng() * 5)));
   const nodes = [];
   for (let i = 0; i < nodeCount; i++) {
-    const angle = rng() * Math.PI * 2;
-    const dist = 0.15 + rng() * 0.85;
-    const x = cx() + Math.cos(angle) * spreadX * dist;
-    const y = cy() + Math.sin(angle) * spreadY * dist;
+    // Random position across screen with margin
+    const margin = 0.1;
+    const x = W * (margin + rng() * (1 - 2 * margin));
+    const y = H * (margin + rng() * (1 - 2 * margin));
     const mass = 0.5 + rng() * 2;
     nodes.push({
       x, y, px: x, py: y,
