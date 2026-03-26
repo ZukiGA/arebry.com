@@ -282,13 +282,13 @@
   window.addEventListener('mouseleave', () => { mouse.active = false; });
 
   // --- Physics constants ---
-  const SPRING_K = 0.00006;
+  const SPRING_K = 0.000008;
   const DAMPING = 0.96;
   const HOME_PULL = 0.00002;
   const DRAG_PULL = 0.012;
-  const WANDER_STR = 0.0005;
-  const FLOCK_RADIUS = 200;
-  const FLOCK_STR = 0.0005;
+  const WANDER_STR = 0.00025;
+  const FLOCK_RADIUS = 80;
+  const FLOCK_STR = 0.00008;
   const BREATH_AMP = 0.005;
   const BREATH_SPEED = 0.00005;
   const BG_CONNECT_DIST = 120;
