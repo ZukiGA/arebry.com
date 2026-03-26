@@ -173,18 +173,18 @@
         vx: 0, vy: 0,
         r: 2 + rng() * 4,
         phase: rng() * Math.PI * 2,
-        speed: 0.0006 + rng() * 0.002,
+        speed: 0.00015 + rng() * 0.0005,
         brightness: 0.3 + rng() * 0.7,
         dragged: false,
         // Noise-based wander — each node samples unique region of noise space
         noiseOffX: rng() * 300 + 100,
         noiseOffY: rng() * 300 + 100,
-        noiseSpeed: 0.000008 + rng() * 0.000015,
-        wanderRadius: 20 + rng() * 35,
+        noiseSpeed: 0.0000015 + rng() * 0.000003,
+        wanderRadius: 25 + rng() * 45,
         // Very slow base drift
         driftAngle: rng() * Math.PI * 2,
-        driftSpeed: 0.0003 + rng() * 0.0008,
-        driftChangeSpeed: 0.000005 + rng() * 0.00001,
+        driftSpeed: 0.00006 + rng() * 0.00015,
+        driftChangeSpeed: 0.0000008 + rng() * 0.0000015,
         driftOff: rng() * 300 + 200,
       });
     }
@@ -284,13 +284,13 @@
   // --- Physics constants ---
   const SPRING_K = 0.00006;
   const DAMPING = 0.96;
-  const HOME_PULL = 0.00008;
+  const HOME_PULL = 0.00002;
   const DRAG_PULL = 0.012;
-  const WANDER_STR = 0.004;
+  const WANDER_STR = 0.001;
   const FLOCK_RADIUS = 200;
   const FLOCK_STR = 0.0005;
   const BREATH_AMP = 0.005;
-  const BREATH_SPEED = 0.0002;
+  const BREATH_SPEED = 0.00005;
   const BG_CONNECT_DIST = 120;
   const MOUSE_BG_RADIUS = 180;
 
@@ -327,8 +327,8 @@
 
       // Noise-driven drift for background particles
       const nOff = p.noiseOff;
-      const nForceX = noise2(p.x * 0.002 + nOff, p.y * 0.002 + tSlow) * 0.006;
-      const nForceY = noise2(p.x * 0.002 + tSlow, p.y * 0.002 + nOff) * 0.006;
+      const nForceX = noise2(p.x * 0.002 + nOff, p.y * 0.002 + tSlow) * 0.0015;
+      const nForceY = noise2(p.x * 0.002 + tSlow, p.y * 0.002 + nOff) * 0.0015;
       p.vx += nForceX; p.vy += nForceY;
 
       p.x += p.vx; p.y += p.vy;
