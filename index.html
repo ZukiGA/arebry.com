@@ -119,7 +119,8 @@
     const y = cy() + Math.sin(angle) * spreadY * dist;
     const mass = 0.5 + rng() * 2;
     nodes.push({
-      x, y, px: x, py: y, // position and previous position (Verlet)
+      x, y, px: x, py: y,
+      homeX: x, homeY: y, // each node remembers where it was born
       mass,
       r: 1.5 + mass * 1.8,
       brightness: 0.3 + rng() * 0.7,
@@ -186,10 +187,10 @@
 
   canvas.addEventListener('mousedown', e => { e.preventDefault(); const n = findNode(e.clientX, e.clientY); if (n >= 0) { dragging = n; nodes[n].dragged = true; canvas.style.cursor = 'grabbing'; }});
   addEventListener('mousemove', e => { mouse.x = e.clientX; mouse.y = e.clientY; mouse.active = true; if (dragging !== null) { nodes[dragging].x = e.clientX; nodes[dragging].y = e.clientY; }});
-  addEventListener('mouseup', () => { if (dragging !== null) { const n = nodes[dragging]; n.dragged = false; n.px = n.x; n.py = n.y; dragging = null; } canvas.style.cursor = 'crosshair'; });
+  addEventListener('mouseup', () => { if (dragging !== null) { const n = nodes[dragging]; n.dragged = false; n.px = n.x; n.py = n.y; n.homeX = n.x; n.homeY = n.y; dragging = null; } canvas.style.cursor = 'crosshair'; });
   canvas.addEventListener('touchstart', e => { e.preventDefault(); const t = e.touches[0]; const n = findNode(t.clientX, t.clientY); if (n >= 0) { dragging = n; nodes[n].dragged = true; }}, {passive:false});
   addEventListener('touchmove', e => { if (dragging !== null) { e.preventDefault(); const t = e.touches[0]; mouse.x = t.clientX; mouse.y = t.clientY; nodes[dragging].x = t.clientX; nodes[dragging].y = t.clientY; }}, {passive:false});
-  addEventListener('touchend', () => { if (dragging !== null) { const n = nodes[dragging]; n.dragged = false; n.px = n.x; n.py = n.y; dragging = null; }});
+  addEventListener('touchend', () => { if (dragging !== null) { const n = nodes[dragging]; n.dragged = false; n.px = n.x; n.py = n.y; n.homeX = n.x; n.homeY = n.y; dragging = null; }});
 
   // === MAIN LOOP ===
   let lastT = performance.now();
@@ -288,9 +289,9 @@
         vy += (aliVy / aliCount - vy) * BOID_ALI_STR * dt;
       }
 
-      // 5. Gentle center pull
-      vx += (cx() - n.x) * CENTER_PULL * dt;
-      vy += (cy() - n.y) * CENTER_PULL * dt;
+      // 5. Home pull (each node returns to its own birth position, not a single center)
+      vx += (n.homeX - n.x) * CENTER_PULL * dt;
+      vy += (n.homeY - n.y) * CENTER_PULL * dt;
 
       // Verlet integration
       n.px = n.x;
