@@ -152,28 +152,28 @@
   }
 
   // === PHYSICS CONSTANTS (all tuned for SLOW meditative motion) ===
-  const GRAVITY_G = 0.00003;       // n-body gravitational constant
+  const GRAVITY_G = 0.00015;       // n-body gravitational constant
   const GRAVITY_SOFTENING = 40;    // prevents singularity
-  const CURL_STRENGTH = 0.00004;   // curl noise turbulence
+  const CURL_STRENGTH = 0.00015;   // curl noise turbulence
   const CURL_SCALE = 0.003;        // noise sample scale
-  const CURL_TIME_SCALE = 0.00002; // how fast curl field evolves
-  const LORENZ_INFLUENCE = 0.000008; // strange attractor whisper
+  const CURL_TIME_SCALE = 0.000015; // how fast curl field evolves
+  const LORENZ_INFLUENCE = 0.00004; // strange attractor whisper
   const BOID_SEP_RADIUS = 60;      // separation distance
-  const BOID_SEP_STR = 0.00003;    // separation force
+  const BOID_SEP_STR = 0.0001;     // separation force
   const BOID_ALI_RADIUS = 150;     // alignment radius
-  const BOID_ALI_STR = 0.00001;    // alignment force
+  const BOID_ALI_STR = 0.00004;    // alignment force
   const BOID_COH_RADIUS = 200;     // cohesion radius
-  const BOID_COH_STR = 0.000005;   // cohesion force
+  const BOID_COH_STR = 0.00002;    // cohesion force
   const VERLET_ITERATIONS = 3;     // constraint relaxation passes
-  const DAMPING = 0.997;           // velocity damping
-  const CENTER_PULL = 0.000003;    // very gentle pull to center
+  const DAMPING = 0.996;           // velocity damping
+  const CENTER_PULL = 0.000008;    // very gentle pull to center
 
   // === DRAG STATE ===
   let dragging = null;
   let mouse = { x: W/2, y: H/2, active: false };
 
   function findNode(mx, my) {
-    let best = -1, bestD = 900;
+    let best = -1, bestD = 2500; // 50px radius for easier mobile taps
     for (let i = 0; i < nodes.length; i++) {
       const dx = nodes[i].x - mx, dy = nodes[i].y - my;
       const d = dx*dx + dy*dy;
@@ -195,10 +195,10 @@
   function frame(now) {
     const dt = Math.min(now - lastT, 50);
     lastT = now;
-    const tSlow = now * 0.00001; // very slow time for curl field
+    const tSlow = now * CURL_TIME_SCALE; // very slow time for curl field
 
     // Step Lorenz attractor
-    lorenzStep(0.001);
+    lorenzStep(0.001 * dt * 0.06); // relative to frame time
     const lorenzNorm = Math.sqrt(lx*lx + ly*ly + lz*lz) || 1;
 
     ctx.clearRect(0, 0, W, H);
@@ -319,8 +319,8 @@
         const ox = dx * diff, oy = dy * diff;
         const totalMass = a.mass + b.mass;
         const ra = b.mass / totalMass, rb = a.mass / totalMass;
-        a.x += ox * ra; a.y += oy * ra;
-        b.x -= ox * rb; b.y -= oy * rb;
+        a.x += ox * ra; a.y += oy * ra; a.px += ox * ra; a.py += oy * ra;
+        b.x -= ox * rb; b.y -= oy * rb; b.px -= ox * rb; b.py -= oy * rb;
       }
     }
 
