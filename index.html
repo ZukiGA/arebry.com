@@ -205,7 +205,11 @@
     if (dragging !== null) {
       const n = nodes[dragging];
       n.dragged = false;
-      // Give it a little velocity based on recent movement
+      // Update base position so it stays where you left it (no spring-back)
+      n.baseX = n.x;
+      n.baseY = n.y;
+      n.vx = 0;
+      n.vy = 0;
       dragging = null;
     }
     canvas.style.cursor = 'crosshair';
