@@ -154,16 +154,14 @@
   // === PHYSICS CONSTANTS (all tuned for SLOW meditative motion) ===
   const GRAVITY_G = 0.00004;       // n-body gravitational constant (reduced — was collapsing)
   const GRAVITY_SOFTENING = 40;    // prevents singularity
+  const LJ_EPSILON = 0.0003;       // Lennard-Jones well depth
+  const LJ_SIGMA = 80;             // Lennard-Jones equilibrium distance
   const CURL_STRENGTH = 0.00015;   // curl noise turbulence
   const CURL_SCALE = 0.003;        // noise sample scale
   const CURL_TIME_SCALE = 0.000015; // how fast curl field evolves
   const LORENZ_INFLUENCE = 0.00004; // strange attractor whisper
-  const BOID_SEP_RADIUS = 120;     // separation distance (doubled)
-  const BOID_SEP_STR = 0.0004;     // separation force (4x stronger)
   const BOID_ALI_RADIUS = 150;     // alignment radius
   const BOID_ALI_STR = 0.00004;    // alignment force
-  const BOID_COH_RADIUS = 200;     // cohesion radius
-  const BOID_COH_STR = 0.000005;   // cohesion force (reduced)
   const VERLET_ITERATIONS = 3;     // constraint relaxation passes
   const DAMPING = 0.996;           // velocity damping
   const CENTER_PULL = 0.000008;    // very gentle pull to center
@@ -241,14 +239,19 @@
       let vx = (n.x - n.px) * DAMPING;
       let vy = (n.y - n.py) * DAMPING;
 
-      // 1. N-BODY GRAVITY
+      // 1. LENNARD-JONES POTENTIAL (replaces gravity + separation)
+      // Attracts at long range, repels at short range, equilibrium at sigma
       for (let j = 0; j < nodes.length; j++) {
         if (j === i) continue;
         const m = nodes[j];
         const dx = m.x - n.x, dy = m.y - n.y;
-        const d2 = dx*dx + dy*dy + GRAVITY_SOFTENING * GRAVITY_SOFTENING;
-        const d = Math.sqrt(d2);
-        const F = GRAVITY_G * n.mass * m.mass / d2;
+        const d = Math.sqrt(dx*dx + dy*dy) || 1;
+        const clamped = Math.max(d, LJ_SIGMA * 0.4); // prevent extreme forces
+        const ratio = LJ_SIGMA / clamped;
+        const r6 = ratio * ratio * ratio * ratio * ratio * ratio;
+        const r12 = r6 * r6;
+        // F = 24ε/r * [2(σ/r)^12 - (σ/r)^6] — negative = attract, positive = repel
+        const F = LJ_EPSILON * (r12 - r6) / clamped;
         vx += (dx / d) * F * dt;
         vy += (dy / d) * F * dt;
       }
@@ -262,39 +265,22 @@
       vx += (lx / lorenzNorm) * LORENZ_INFLUENCE * dt;
       vy += (ly / lorenzNorm) * LORENZ_INFLUENCE * dt;
 
-      // 4. BOIDS
-      let sepX = 0, sepY = 0, aliVx = 0, aliVy = 0, aliCount = 0;
-      let cohX = 0, cohY = 0, cohCount = 0;
+      // 4. BOIDS (alignment only — LJ handles separation + cohesion)
+      let aliVx = 0, aliVy = 0, aliCount = 0;
       for (let j = 0; j < nodes.length; j++) {
         if (j === i) continue;
         const m = nodes[j];
         const dx = n.x - m.x, dy = n.y - m.y;
         const d = Math.sqrt(dx*dx + dy*dy) || 1;
-        // Separation
-        if (d < BOID_SEP_RADIUS) {
-          sepX += (dx / d) / d;
-          sepY += (dy / d) / d;
-        }
         // Alignment
         if (d < BOID_ALI_RADIUS) {
           aliVx += m.x - m.px; aliVy += m.y - m.py;
           aliCount++;
         }
-        // Cohesion
-        if (d < BOID_COH_RADIUS) {
-          cohX += m.x; cohY += m.y;
-          cohCount++;
-        }
       }
-      vx += sepX * BOID_SEP_STR * dt;
-      vy += sepY * BOID_SEP_STR * dt;
       if (aliCount > 0) {
         vx += (aliVx / aliCount - vx) * BOID_ALI_STR * dt;
         vy += (aliVy / aliCount - vy) * BOID_ALI_STR * dt;
-      }
-      if (cohCount > 0) {
-        vx += (cohX / cohCount - n.x) * BOID_COH_STR * dt;
-        vy += (cohY / cohCount - n.y) * BOID_COH_STR * dt;
       }
 
       // 5. Gentle center pull
