@@ -135,7 +135,6 @@
   const ctx = canvas.getContext('2d');
   const dpr = Math.min(window.devicePixelRatio || 1, 2);
 
-  // Size: fill a large portion of the viewport
   let size;
   function resize() {
     size = Math.min(window.innerWidth, window.innerHeight) * 0.7;
@@ -155,38 +154,80 @@
   for (let i = 0; i < seedStr.length; i++) s = ((s << 5) - s + seedStr.charCodeAt(i)) | 0;
   function rng() { s = (s * 16807 + 0) % 2147483647; return (s & 0x7fffffff) / 2147483647; }
 
-  // Mouse tracking (relative to canvas center)
+  // Mouse / touch state
   let mouse = { x: 0, y: 0, active: false };
-  const glyphEl = canvas;
+  let dragging = null; // index of node being dragged
 
-  function updateMouse(cx, cy) {
-    const rect = glyphEl.getBoundingClientRect();
-    mouse.x = cx - rect.left - rect.width / 2;
-    mouse.y = cy - rect.top - rect.height / 2;
-    mouse.active = true;
+  function canvasCoords(cx, cy) {
+    const rect = canvas.getBoundingClientRect();
+    return { x: cx - rect.left - rect.width / 2, y: cy - rect.top - rect.height / 2 };
   }
 
-  window.addEventListener('mousemove', (e) => updateMouse(e.clientX, e.clientY));
-  window.addEventListener('touchmove', (e) => {
-    updateMouse(e.touches[0].clientX, e.touches[0].clientY);
-  }, { passive: true });
-  window.addEventListener('touchstart', (e) => {
-    updateMouse(e.touches[0].clientX, e.touches[0].clientY);
-  }, { passive: true });
-  window.addEventListener('mouseleave', () => { mouse.active = false; });
-  window.addEventListener('touchend', () => { mouse.active = false; });
+  function findNode(mx, my) {
+    const grabRadius = 18;
+    let closest = -1, closestDist = grabRadius;
+    for (let i = 0; i < nodes.length; i++) {
+      const dx = nodes[i].x - mx, dy = nodes[i].y - my;
+      const d = Math.sqrt(dx * dx + dy * dy);
+      if (d < closestDist) { closestDist = d; closest = i; }
+    }
+    return closest;
+  }
 
-  // Generate constellation
-  let nodes = [], edges = [], orbitAngle = 0;
+  // --- Drag handlers ---
+  function onPointerDown(cx, cy) {
+    const p = canvasCoords(cx, cy);
+    mouse.x = p.x; mouse.y = p.y; mouse.active = true;
+    const idx = findNode(p.x, p.y);
+    if (idx >= 0) {
+      dragging = idx;
+      const n = nodes[idx];
+      n.dragged = true;
+      n.vx = 0; n.vy = 0;
+      canvas.style.cursor = 'grabbing';
+    }
+  }
+
+  function onPointerMove(cx, cy) {
+    const p = canvasCoords(cx, cy);
+    mouse.x = p.x; mouse.y = p.y; mouse.active = true;
+    if (dragging !== null) {
+      const n = nodes[dragging];
+      n.x = p.x; n.y = p.y;
+    } else {
+      // Update cursor based on hover
+      const idx = findNode(p.x, p.y);
+      canvas.style.cursor = idx >= 0 ? 'grab' : 'crosshair';
+    }
+  }
+
+  function onPointerUp() {
+    if (dragging !== null) {
+      const n = nodes[dragging];
+      n.dragged = false;
+      // Give it a little velocity based on recent movement
+      dragging = null;
+    }
+    canvas.style.cursor = 'crosshair';
+  }
+
+  canvas.addEventListener('mousedown', (e) => { e.preventDefault(); onPointerDown(e.clientX, e.clientY); });
+  window.addEventListener('mousemove', (e) => onPointerMove(e.clientX, e.clientY));
+  window.addEventListener('mouseup', () => onPointerUp());
+  canvas.addEventListener('touchstart', (e) => { e.preventDefault(); onPointerDown(e.touches[0].clientX, e.touches[0].clientY); }, { passive: false });
+  window.addEventListener('touchmove', (e) => { if (dragging !== null) e.preventDefault(); onPointerMove(e.touches[0].clientX, e.touches[0].clientY); }, { passive: false });
+  window.addEventListener('touchend', () => onPointerUp());
+  window.addEventListener('mouseleave', () => { mouse.active = false; });
+
+  // --- Constellation generation ---
+  let nodes = [], edges = [];
 
   function generateConstellation() {
-    // Reset seed for consistent daily generation
     s = 0;
     for (let i = 0; i < seedStr.length; i++) s = ((s << 5) - s + seedStr.charCodeAt(i)) | 0;
 
-    const cx = 0, cy = 0;
     const radius = size * 0.38;
-    const nodeCount = 7 + Math.floor(rng() * 6); // 7-12 nodes
+    const nodeCount = 7 + Math.floor(rng() * 6);
     nodes = [];
 
     for (let i = 0; i < nodeCount; i++) {
@@ -194,21 +235,25 @@
       const dist = radius * (0.15 + rng() * 0.85);
       const baseX = Math.cos(angle) * dist;
       const baseY = Math.sin(angle) * dist;
-      const brightness = 0.3 + rng() * 0.7; // some nodes are brighter
       nodes.push({
         baseX, baseY,
         x: baseX, y: baseY,
+        vx: 0, vy: 0,
         r: 2 + rng() * 4,
         phase: rng() * Math.PI * 2,
         speed: 0.003 + rng() * 0.012,
-        brightness,
-        orbitR: 1 + rng() * 3, // subtle orbital drift radius
-        orbitSpeed: 0.0004 + rng() * 0.001,
-        orbitPhase: rng() * Math.PI * 2,
+        brightness: 0.3 + rng() * 0.7,
+        dragged: false,
+        // Wander: each node has its own perlin-like wander target
+        wanderAngle: rng() * Math.PI * 2,
+        wanderSpeed: 0.0003 + rng() * 0.0008,
+        wanderRadius: 4 + rng() * 12,
+        wanderPhaseX: rng() * 1000,
+        wanderPhaseY: rng() * 1000,
       });
     }
 
-    // Generate edges (connect nearby nodes + ensure connectivity)
+    // Generate edges
     edges = [];
     const maxEdgeDist = radius * 0.7;
     for (let i = 0; i < nodes.length; i++) {
@@ -218,16 +263,16 @@
         const d = Math.sqrt(dx * dx + dy * dy);
         if (d < maxEdgeDist && rng() > 0.35) {
           edges.push({
-            a: i, b: j,
+            a: i, b: j, restLength: d,
             pulseOffset: rng() * Math.PI * 2,
             pulseSpeed: 0.0008 + rng() * 0.002,
-            energySpeed: 0.0005 + rng() * 0.002, // energy traveling along edge
+            particles: [rng(), rng() * 0.5 + 0.5], // two energy particles per edge at different phases
           });
         }
       }
     }
 
-    // Ensure each node has at least one connection
+    // Ensure connectivity
     for (let i = 0; i < nodes.length; i++) {
       const hasEdge = edges.some(e => e.a === i || e.b === i);
       if (!hasEdge) {
@@ -241,7 +286,9 @@
         }
         if (closest >= 0) {
           const a = Math.min(i, closest), b = Math.max(i, closest);
-          edges.push({ a, b, pulseOffset: rng() * Math.PI * 2, pulseSpeed: 0.001, energySpeed: 0.001 });
+          const dx = nodes[a].baseX - nodes[b].baseX;
+          const dy = nodes[a].baseY - nodes[b].baseY;
+          edges.push({ a, b, restLength: Math.sqrt(dx*dx+dy*dy), pulseOffset: rng() * Math.PI * 2, pulseSpeed: 0.001, particles: [rng()] });
         }
       }
     }
@@ -249,114 +296,175 @@
 
   generateConstellation();
 
+  // --- Physics constants ---
+  const SPRING_STIFFNESS = 0.0004;  // spring pull between connected nodes
+  const SPRING_DAMPING = 0.97;
+  const HOME_PULL = 0.003;          // pull back toward base position
+  const DRAG_SPRING_PULL = 0.015;   // connected nodes pull toward dragged node
+  const WANDER_STRENGTH = 0.08;
+  const BREATHING_AMP = 0.012;      // global breathing scale
+  const BREATHING_SPEED = 0.0008;
+
+  let lastT = 0;
+
   function draw(t) {
+    const dt = Math.min(t - lastT, 50); // cap delta for tab-switch
+    lastT = t;
     ctx.clearRect(0, 0, size, size);
     ctx.save();
     ctx.translate(size / 2, size / 2);
 
-    // Global slow rotation
-    orbitAngle = t * 0.00003;
+    // Global breathing
+    const breath = 1 + Math.sin(t * BREATHING_SPEED) * BREATHING_AMP;
+    const breathSlow = Math.sin(t * BREATHING_SPEED * 0.37);
 
     const interactRadius = size * 0.35;
 
-    // Update node positions with orbital drift + mouse interaction
+    // --- Physics step ---
+    // 1. Wander forces (organic drifting)
     for (const n of nodes) {
-      // Orbital drift
-      const ox = Math.cos(t * n.orbitSpeed + n.orbitPhase) * n.orbitR;
-      const oy = Math.sin(t * n.orbitSpeed + n.orbitPhase) * n.orbitR;
+      if (n.dragged) continue;
+      // Smooth wander using layered sine waves (cheap perlin substitute)
+      const wx = Math.sin(t * n.wanderSpeed + n.wanderPhaseX) * Math.cos(t * n.wanderSpeed * 0.7 + n.wanderPhaseY * 1.3);
+      const wy = Math.cos(t * n.wanderSpeed * 0.8 + n.wanderPhaseY) * Math.sin(t * n.wanderSpeed * 0.6 + n.wanderPhaseX * 0.9);
+      const wanderTargetX = n.baseX + wx * n.wanderRadius;
+      const wanderTargetY = n.baseY + wy * n.wanderRadius;
 
-      // Rotate around center
-      const cos = Math.cos(orbitAngle), sin = Math.sin(orbitAngle);
-      const rx = (n.baseX + ox) * cos - (n.baseY + oy) * sin;
-      const ry = (n.baseX + ox) * sin + (n.baseY + oy) * cos;
+      // Pull toward wander target
+      n.vx += (wanderTargetX - n.x) * WANDER_STRENGTH * (dt * 0.06);
+      n.vy += (wanderTargetY - n.y) * WANDER_STRENGTH * (dt * 0.06);
 
-      n.x = rx;
-      n.y = ry;
+      // Gentle home pull (keeps nodes from drifting too far after drag)
+      n.vx += (n.baseX - n.x) * HOME_PULL * (dt * 0.06);
+      n.vy += (n.baseY - n.y) * HOME_PULL * (dt * 0.06);
+    }
 
-      // Mouse interaction: pull toward cursor, glow brighter
-      if (mouse.active) {
-        const dx = mouse.x - n.x;
-        const dy = mouse.y - n.y;
+    // 2. Spring forces along edges
+    for (const e of edges) {
+      const a = nodes[e.a], b = nodes[e.b];
+      const dx = b.x - a.x, dy = b.y - a.y;
+      const dist = Math.sqrt(dx * dx + dy * dy) || 0.01;
+      const stretch = dist - e.restLength;
+      const fx = (dx / dist) * stretch * SPRING_STIFFNESS * dt;
+      const fy = (dy / dist) * stretch * SPRING_STIFFNESS * dt;
+
+      if (!a.dragged) { a.vx += fx; a.vy += fy; }
+      if (!b.dragged) { b.vx -= fx; b.vy -= fy; }
+
+      // If one end is being dragged, pull connected nodes more strongly
+      if (a.dragged && !b.dragged) {
+        b.vx += (a.x - b.x) * DRAG_SPRING_PULL;
+        b.vy += (a.y - b.y) * DRAG_SPRING_PULL;
+      }
+      if (b.dragged && !a.dragged) {
+        a.vx += (b.x - a.x) * DRAG_SPRING_PULL;
+        a.vy += (b.y - a.y) * DRAG_SPRING_PULL;
+      }
+    }
+
+    // 3. Integrate velocities
+    for (const n of nodes) {
+      if (n.dragged) { n.vx = 0; n.vy = 0; continue; }
+      n.vx *= SPRING_DAMPING;
+      n.vy *= SPRING_DAMPING;
+      n.x += n.vx;
+      n.y += n.vy;
+
+      // Mouse proximity push/pull (non-drag hover effect)
+      if (mouse.active && dragging === null) {
+        const dx = mouse.x - n.x, dy = mouse.y - n.y;
         const dist = Math.sqrt(dx * dx + dy * dy);
         if (dist < interactRadius && dist > 0) {
-          const strength = (1 - dist / interactRadius) * 18;
-          n.x += (dx / dist) * strength;
-          n.y += (dy / dist) * strength;
+          const strength = (1 - dist / interactRadius) * 12;
+          n.x += (dx / dist) * strength * 0.08;
+          n.y += (dy / dist) * strength * 0.08;
         }
       }
     }
 
-    // Draw edges with energy pulses
+    // Apply breathing scale
+    ctx.save();
+    ctx.scale(breath, breath);
+
+    // --- Draw edges with energy particles ---
     for (const e of edges) {
       const a = nodes[e.a], b = nodes[e.b];
       const dx = b.x - a.x, dy = b.y - a.y;
       const len = Math.sqrt(dx * dx + dy * dy);
 
-      // Base edge
       const basePulse = 0.08 + 0.06 * Math.sin(t * e.pulseSpeed + e.pulseOffset);
 
-      // Mouse proximity boost for edge
+      // Edge tension glow (stretched edges glow more)
+      const tension = Math.abs(len - e.restLength) / (e.restLength || 1);
+      const tensionGlow = Math.min(tension * 0.8, 0.4);
+
+      // Mouse proximity boost
       let edgeGlow = 0;
       if (mouse.active) {
         const midX = (a.x + b.x) / 2, midY = (a.y + b.y) / 2;
         const mDist = Math.sqrt((mouse.x - midX) ** 2 + (mouse.y - midY) ** 2);
-        if (mDist < interactRadius) {
-          edgeGlow = (1 - mDist / interactRadius) * 0.25;
-        }
+        if (mDist < interactRadius) edgeGlow = (1 - mDist / interactRadius) * 0.25;
       }
 
-      // Draw main edge line
+      const totalEdgeAlpha = basePulse + edgeGlow + tensionGlow;
+
       ctx.beginPath();
       ctx.moveTo(a.x, a.y);
       ctx.lineTo(b.x, b.y);
-      ctx.strokeStyle = `rgba(200,194,184,${basePulse + edgeGlow})`;
-      ctx.lineWidth = 0.8 + edgeGlow * 3;
+      ctx.strokeStyle = `rgba(200,194,184,${totalEdgeAlpha})`;
+      ctx.lineWidth = 0.8 + (edgeGlow + tensionGlow) * 3;
       ctx.stroke();
 
-      // Energy particle traveling along edge
+      // Energy particles traveling along edge
       if (len > 5) {
-        const progress = ((t * e.energySpeed + e.pulseOffset) % (Math.PI * 2)) / (Math.PI * 2);
-        const ex = a.x + dx * progress;
-        const ey = a.y + dy * progress;
-        const eAlpha = 0.4 + edgeGlow * 1.5;
-        const eRadius = 1.2 + edgeGlow * 2;
+        for (const pOffset of e.particles) {
+          const speed = 0.0003 + pOffset * 0.0004;
+          const progress = ((t * speed + pOffset * Math.PI * 2) % (Math.PI * 2)) / (Math.PI * 2);
+          const ex = a.x + dx * progress;
+          const ey = a.y + dy * progress;
+          const eAlpha = (0.3 + edgeGlow * 1.5 + tensionGlow) * (0.6 + 0.4 * Math.sin(t * 0.003 + pOffset * 5));
+          const eRadius = 1.0 + edgeGlow * 2 + tensionGlow * 2;
 
-        // Glow
-        const grad = ctx.createRadialGradient(ex, ey, 0, ex, ey, eRadius * 4);
-        grad.addColorStop(0, `rgba(220,216,208,${eAlpha * 0.6})`);
-        grad.addColorStop(1, 'rgba(220,216,208,0)');
-        ctx.beginPath();
-        ctx.arc(ex, ey, eRadius * 4, 0, Math.PI * 2);
-        ctx.fillStyle = grad;
-        ctx.fill();
+          const grad = ctx.createRadialGradient(ex, ey, 0, ex, ey, eRadius * 4);
+          grad.addColorStop(0, `rgba(220,216,208,${eAlpha * 0.6})`);
+          grad.addColorStop(1, 'rgba(220,216,208,0)');
+          ctx.beginPath();
+          ctx.arc(ex, ey, eRadius * 4, 0, Math.PI * 2);
+          ctx.fillStyle = grad;
+          ctx.fill();
 
-        // Core
-        ctx.beginPath();
-        ctx.arc(ex, ey, eRadius, 0, Math.PI * 2);
-        ctx.fillStyle = `rgba(235,232,225,${eAlpha})`;
-        ctx.fill();
+          ctx.beginPath();
+          ctx.arc(ex, ey, eRadius, 0, Math.PI * 2);
+          ctx.fillStyle = `rgba(235,232,225,${eAlpha})`;
+          ctx.fill();
+        }
       }
     }
 
-    // Draw nodes with glow/bloom
-    for (const n of nodes) {
+    // --- Draw nodes ---
+    for (let i = 0; i < nodes.length; i++) {
+      const n = nodes[i];
       const pulse = n.brightness * (0.5 + 0.5 * Math.sin(t * n.speed + n.phase));
       const r = n.r * (0.85 + 0.15 * Math.sin(t * n.speed * 0.7 + n.phase));
 
-      // Mouse proximity glow boost
+      // Glow boost from mouse proximity or being dragged
       let glowBoost = 0;
-      if (mouse.active) {
+      if (n.dragged) {
+        glowBoost = 1.0;
+      } else if (mouse.active) {
         const dx = mouse.x - n.x, dy = mouse.y - n.y;
         const dist = Math.sqrt(dx * dx + dy * dy);
-        if (dist < interactRadius) {
-          glowBoost = (1 - dist / interactRadius);
-        }
+        if (dist < interactRadius) glowBoost = (1 - dist / interactRadius);
       }
 
-      const totalBrightness = pulse + glowBoost * 0.7;
+      // Velocity-based glow (nodes moving fast glow brighter)
+      const velMag = Math.sqrt(n.vx * n.vx + n.vy * n.vy);
+      const velGlow = Math.min(velMag * 0.15, 0.3);
+
+      const totalBrightness = pulse + glowBoost * 0.7 + velGlow;
 
       // Outer bloom
-      const bloomR = r * (3 + glowBoost * 4);
+      const bloomR = r * (3 + glowBoost * 4 + velGlow * 3);
       const grad = ctx.createRadialGradient(n.x, n.y, 0, n.x, n.y, bloomR);
       grad.addColorStop(0, `rgba(210,205,195,${totalBrightness * 0.3})`);
       grad.addColorStop(0.5, `rgba(210,205,195,${totalBrightness * 0.08})`);
@@ -368,12 +476,13 @@
 
       // Core node
       ctx.beginPath();
-      ctx.arc(n.x, n.y, r, 0, Math.PI * 2);
+      ctx.arc(n.x, n.y, r * (n.dragged ? 1.3 : 1), 0, Math.PI * 2);
       ctx.fillStyle = `rgba(235,230,222,${Math.min(totalBrightness, 1)})`;
       ctx.fill();
     }
 
-    ctx.restore();
+    ctx.restore(); // breathing scale
+    ctx.restore(); // translate
     requestAnimationFrame(draw);
   }
 
