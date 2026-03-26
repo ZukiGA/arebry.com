@@ -7,51 +7,20 @@
 <style>
   @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300&display=swap');
   * { margin: 0; padding: 0; box-sizing: border-box; }
-  body {
-    background: #0a0a0f;
-    color: #e8e4df;
-    font-family: 'Inter', sans-serif;
-    height: 100vh;
-    overflow: hidden;
-  }
-  canvas {
-    position: fixed;
-    top: 0; left: 0;
-    width: 100%; height: 100%;
-    cursor: crosshair;
-  }
+  body { background: #0a0a0f; color: #e8e4df; font-family: 'Inter', sans-serif; height: 100vh; overflow: hidden; }
+  canvas { position: fixed; top: 0; left: 0; width: 100%; height: 100%; cursor: crosshair; }
   .links {
-    position: fixed;
-    bottom: 2.5rem;
-    left: 0; right: 0;
-    z-index: 2;
-    display: flex;
-    gap: 1.6rem;
-    flex-wrap: wrap;
-    justify-content: center;
-    align-items: center;
+    position: fixed; bottom: 2.5rem; left: 0; right: 0; z-index: 2;
+    display: flex; gap: 1.6rem; flex-wrap: wrap; justify-content: center; align-items: center;
     pointer-events: none;
   }
   .links a {
-    pointer-events: auto;
-    color: #807b74;
-    text-decoration: none;
-    font-weight: 300;
-    font-size: clamp(0.85rem, 2.5vw, 1rem);
-    letter-spacing: 0.04em;
-    padding: 0.3rem 0;
-    border-bottom: 1px solid transparent;
-    transition: color 0.3s, border-color 0.3s;
+    pointer-events: auto; color: #807b74; text-decoration: none; font-weight: 300;
+    font-size: clamp(0.85rem, 2.5vw, 1rem); letter-spacing: 0.04em; padding: 0.3rem 0;
+    border-bottom: 1px solid transparent; transition: color 0.3s, border-color 0.3s;
   }
-  .links a:hover {
-    color: #c8c2b8;
-    border-bottom-color: #c8c2b830;
-  }
-  .dot {
-    color: #3a3832;
-    font-size: clamp(0.6rem, 1.5vw, 0.75rem);
-    user-select: none;
-  }
+  .links a:hover { color: #c8c2b8; border-bottom-color: #c8c2b830; }
+  .dot { color: #3a3832; font-size: clamp(0.6rem, 1.5vw, 0.75rem); user-select: none; }
 </style>
 </head>
 <body>
@@ -62,508 +31,333 @@
   <a href="https://postalviviente.com" target="_blank" rel="noopener">postalviviente.com</a>
 </nav>
 <script>
-(function () {
+(function() {
   const canvas = document.getElementById('c');
   const ctx = canvas.getContext('2d');
   let W, H, dpr;
 
   function resize() {
-    dpr = Math.min(window.devicePixelRatio || 1, 2);
-    W = window.innerWidth;
-    H = window.innerHeight;
-    canvas.width = W * dpr;
-    canvas.height = H * dpr;
-    canvas.style.width = W + 'px';
-    canvas.style.height = H + 'px';
+    dpr = Math.min(devicePixelRatio || 1, 2);
+    W = innerWidth; H = innerHeight;
+    canvas.width = W * dpr; canvas.height = H * dpr;
+    canvas.style.width = W + 'px'; canvas.style.height = H + 'px';
     ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
   }
+  resize();
+  addEventListener('resize', resize);
 
-  // --- Seed RNG from date ---
+  // === SIMPLEX NOISE 2D ===
+  const G2 = (Math.sqrt(3) - 1) / 2, F2 = (3 - Math.sqrt(3)) / 6;
+  const grad = [[1,1],[-1,1],[1,-1],[-1,-1],[1,0],[-1,0],[0,1],[0,-1]];
+  const perm = new Uint8Array(512);
+  (function() { const p = new Uint8Array(256); for (let i = 0; i < 256; i++) p[i] = i;
+    for (let i = 255; i > 0; i--) { const j = Math.floor(Math.random() * (i + 1)); [p[i], p[j]] = [p[j], p[i]]; }
+    for (let i = 0; i < 512; i++) perm[i] = p[i & 255];
+  })();
+  function simplex2(x, y) {
+    const s = (x + y) * G2; const i = Math.floor(x + s), j = Math.floor(y + s);
+    const t = (i + j) * F2; const x0 = x - i + t, y0 = y - j + t;
+    const i1 = x0 > y0 ? 1 : 0, j1 = x0 > y0 ? 0 : 1;
+    const x1 = x0 - i1 + F2, y1 = y0 - j1 + F2, x2 = x0 - 1 + 2*F2, y2 = y0 - 1 + 2*F2;
+    const ii = i & 255, jj = j & 255;
+    let n0 = 0, n1 = 0, n2 = 0;
+    let t0 = 0.5 - x0*x0 - y0*y0;
+    if (t0 > 0) { t0 *= t0; const g = grad[perm[ii + perm[jj]] & 7]; n0 = t0 * t0 * (g[0]*x0 + g[1]*y0); }
+    let t1 = 0.5 - x1*x1 - y1*y1;
+    if (t1 > 0) { t1 *= t1; const g = grad[perm[ii+i1 + perm[jj+j1]] & 7]; n1 = t1 * t1 * (g[0]*x1 + g[1]*y1); }
+    let t2 = 0.5 - x2*x2 - y2*y2;
+    if (t2 > 0) { t2 *= t2; const g = grad[perm[ii+1 + perm[jj+1]] & 7]; n2 = t2 * t2 * (g[0]*x2 + g[1]*y2); }
+    return 70 * (n0 + n1 + n2);
+  }
+  // Fractal noise
+  function fnoise(x, y) { return simplex2(x, y) * 0.6 + simplex2(x*2.1, y*2.1) * 0.3 + simplex2(x*4.3, y*4.3) * 0.1; }
+  // Curl noise (divergence-free flow from noise field)
+  function curl(x, y, t) {
+    const e = 0.01;
+    const dndx = (fnoise(x + e, y + t) - fnoise(x - e, y + t)) / (2 * e);
+    const dndy = (fnoise(x, y + e + t) - fnoise(x, y - e + t)) / (2 * e);
+    return { x: dndy, y: -dndx }; // curl of scalar field
+  }
+
+  // === LORENZ ATTRACTOR (for subtle chaotic flow) ===
+  let lx = 0.1, ly = 0, lz = 0;
+  const SIGMA = 10, RHO = 28, BETA = 8/3;
+  function lorenzStep(dt) {
+    const dx = SIGMA * (ly - lx) * dt;
+    const dy = (lx * (RHO - lz) - ly) * dt;
+    const dz = (lx * ly - BETA * lz) * dt;
+    lx += dx; ly += dy; lz += dz;
+  }
+
+  // === SEEDED RNG (daily) ===
   const seedStr = new Date().toDateString();
   let seed = 0;
   for (let i = 0; i < seedStr.length; i++) seed = ((seed << 5) - seed + seedStr.charCodeAt(i)) | 0;
-  const seedStart = seed;
   function rng() { seed = (seed * 16807) % 2147483647; return (seed & 0x7fffffff) / 2147483647; }
 
-  // --- Simplex 2D noise (never repeats) ---
-  const PERM = new Uint8Array(512);
-  const GRAD = [[1,1],[-1,1],[1,-1],[-1,-1],[1,0],[-1,0],[0,1],[0,-1]];
-  (function buildPerm() {
-    const p = new Uint8Array(256);
-    for (let i = 0; i < 256; i++) p[i] = i;
-    // Fisher-Yates with our seeded rng
-    for (let i = 255; i > 0; i--) {
-      const j = Math.floor(rng() * (i + 1));
-      const tmp = p[i]; p[i] = p[j]; p[j] = tmp;
-    }
-    for (let i = 0; i < 512; i++) PERM[i] = p[i & 255];
-  })();
-
-  function simplex2(x, y) {
-    const F2 = 0.5 * (Math.sqrt(3) - 1);
-    const G2 = (3 - Math.sqrt(3)) / 6;
-    const s = (x + y) * F2;
-    const i = Math.floor(x + s), j = Math.floor(y + s);
-    const t = (i + j) * G2;
-    const x0 = x - (i - t), y0 = y - (j - t);
-    const i1 = x0 > y0 ? 1 : 0, j1 = x0 > y0 ? 0 : 1;
-    const x1 = x0 - i1 + G2, y1 = y0 - j1 + G2;
-    const x2 = x0 - 1 + 2 * G2, y2 = y0 - 1 + 2 * G2;
-    const ii = i & 255, jj = j & 255;
-    function contrib(tx, ty, gi) {
-      const t0 = 0.5 - tx * tx - ty * ty;
-      if (t0 < 0) return 0;
-      const g = GRAD[gi & 7];
-      return t0 * t0 * t0 * t0 * (g[0] * tx + g[1] * ty);
-    }
-    return 70 * (
-      contrib(x0, y0, PERM[ii + PERM[jj]]) +
-      contrib(x1, y1, PERM[ii + i1 + PERM[jj + j1]]) +
-      contrib(x2, y2, PERM[ii + 1 + PERM[jj + 1]])
-    );
+  // === BACKGROUND PARTICLES ===
+  const bgCount = Math.min(Math.floor(W * H / 7000), 180);
+  const bg = [];
+  for (let i = 0; i < bgCount; i++) {
+    bg.push({ x: Math.random()*W, y: Math.random()*H, vx: 0, vy: 0,
+      r: Math.random()*1.2+0.3, alpha: Math.random()*0.25+0.05, nOff: Math.random()*500 });
   }
 
-  // Fractal noise — 2 octaves for organic feel
-  function noise2(x, y) {
-    return simplex2(x, y) * 0.7 + simplex2(x * 2.0, y * 2.0) * 0.3;
+  // === CONSTELLATION NODES ===
+  const cx = () => W/2, cy = () => H/2;
+  const spread = Math.min(W, H) * 0.3;
+  const nodeCount = 18 + Math.floor(rng() * 10);
+  const nodes = [];
+  for (let i = 0; i < nodeCount; i++) {
+    const angle = rng() * Math.PI * 2;
+    const dist = spread * (0.15 + rng() * 0.85);
+    const x = cx() + Math.cos(angle) * dist;
+    const y = cy() + Math.sin(angle) * dist;
+    const mass = 0.5 + rng() * 2;
+    nodes.push({
+      x, y, px: x, py: y, // position and previous position (Verlet)
+      mass,
+      r: 1.5 + mass * 1.8,
+      brightness: 0.3 + rng() * 0.7,
+      phase: rng() * Math.PI * 2,
+      nOff: rng() * 500,
+      dragged: false
+    });
   }
 
-  // --- Mouse state ---
-  let mouse = { x: -9999, y: -9999, active: false };
-  let dragging = null;
-
-  // --- Background particles ---
-  let bgParticles = [];
-
-  function initBgParticles() {
-    const count = Math.min(Math.floor((W * H) / 7000), 180);
-    bgParticles = [];
-    for (let i = 0; i < count; i++) {
-      bgParticles.push({
-        x: Math.random() * W,
-        y: Math.random() * H,
-        vx: (Math.random() - 0.5) * 0.08,
-        vy: (Math.random() - 0.5) * 0.08,
-        r: Math.random() * 1.2 + 0.3,
-        alpha: Math.random() * 0.2 + 0.05,
-        noiseOff: Math.random() * 1000,
-      });
-    }
-  }
-
-  // --- Constellation ---
-  let nodes = [], edges = [];
-  const cx = () => W / 2;
-  const cy = () => H / 2;
-
-  function generateConstellation() {
-    seed = seedStart;
-    const spread = Math.min(W, H) * 0.35;
-    const nodeCount = 18 + Math.floor(rng() * 10);
-    nodes = [];
-
-    for (let i = 0; i < nodeCount; i++) {
-      const angle = rng() * Math.PI * 2;
-      const dist = spread * (0.15 + rng() * 0.85);
-      const bx = cx() + Math.cos(angle) * dist;
-      const by = cy() + Math.sin(angle) * dist;
-      nodes.push({
-        baseX: bx, baseY: by,
-        x: bx, y: by,
-        vx: 0, vy: 0,
-        r: 2 + rng() * 4,
-        phase: rng() * Math.PI * 2,
-        speed: 0.00015 + rng() * 0.0005,
-        brightness: 0.3 + rng() * 0.7,
-        dragged: false,
-        // Noise-based wander — each node samples unique region of noise space
-        noiseOffX: rng() * 300 + 100,
-        noiseOffY: rng() * 300 + 100,
-        noiseSpeed: 0.0000008 + rng() * 0.0000015,
-        wanderRadius: 25 + rng() * 45,
-        // Very slow base drift
-        driftAngle: rng() * Math.PI * 2,
-        driftSpeed: 0.00003 + rng() * 0.00008,
-        driftChangeSpeed: 0.0000008 + rng() * 0.0000015,
-        driftOff: rng() * 300 + 200,
-      });
-    }
-
-    edges = [];
-    const maxEdgeDist = spread * 0.75;
-    for (let i = 0; i < nodes.length; i++) {
-      for (let j = i + 1; j < nodes.length; j++) {
-        const dx = nodes[i].baseX - nodes[j].baseX;
-        const dy = nodes[i].baseY - nodes[j].baseY;
-        const d = Math.sqrt(dx * dx + dy * dy);
-        if (d < maxEdgeDist && rng() > 0.35) {
-          edges.push({
-            a: i, b: j, restLength: d,
-            pulseOffset: rng() * Math.PI * 2,
-            pulseSpeed: 0.0002 + rng() * 0.0004,
-            particles: [rng(), rng() * 0.5 + 0.5],
-          });
-        }
+  // === EDGES ===
+  const edges = [];
+  const maxEdgeDist = spread * 0.7;
+  for (let i = 0; i < nodes.length; i++) {
+    for (let j = i + 1; j < nodes.length; j++) {
+      const dx = nodes[i].x - nodes[j].x, dy = nodes[i].y - nodes[j].y;
+      const d = Math.sqrt(dx*dx + dy*dy);
+      if (d < maxEdgeDist && rng() > 0.4) {
+        edges.push({ a: i, b: j, restLen: d, energy: rng() });
       }
     }
-
-    // Ensure connectivity
-    for (let i = 0; i < nodes.length; i++) {
-      if (edges.some(e => e.a === i || e.b === i)) continue;
-      let closest = -1, closestDist = Infinity;
+  }
+  // Ensure connectivity
+  for (let i = 0; i < nodes.length; i++) {
+    if (!edges.some(e => e.a === i || e.b === i)) {
+      let best = -1, bestD = Infinity;
       for (let j = 0; j < nodes.length; j++) {
         if (j === i) continue;
-        const dx = nodes[i].baseX - nodes[j].baseX;
-        const dy = nodes[i].baseY - nodes[j].baseY;
-        const d = dx * dx + dy * dy;
-        if (d < closestDist) { closestDist = d; closest = j; }
+        const dx = nodes[i].x - nodes[j].x, dy = nodes[i].y - nodes[j].y;
+        const d = Math.sqrt(dx*dx+dy*dy);
+        if (d < bestD) { bestD = d; best = j; }
       }
-      if (closest >= 0) {
-        const a = Math.min(i, closest), b = Math.max(i, closest);
-        const dx = nodes[a].baseX - nodes[b].baseX;
-        const dy = nodes[a].baseY - nodes[b].baseY;
-        edges.push({ a, b, restLength: Math.sqrt(dx * dx + dy * dy), pulseOffset: rng() * Math.PI * 2, pulseSpeed: 0.0002, particles: [rng()] });
-      }
+      if (best >= 0) edges.push({ a: i, b: best, restLen: bestD, energy: rng() });
     }
   }
 
-  // --- Find node near point ---
+  // === PHYSICS CONSTANTS (all tuned for SLOW meditative motion) ===
+  const GRAVITY_G = 0.00003;       // n-body gravitational constant
+  const GRAVITY_SOFTENING = 40;    // prevents singularity
+  const CURL_STRENGTH = 0.00004;   // curl noise turbulence
+  const CURL_SCALE = 0.003;        // noise sample scale
+  const CURL_TIME_SCALE = 0.00002; // how fast curl field evolves
+  const LORENZ_INFLUENCE = 0.000008; // strange attractor whisper
+  const BOID_SEP_RADIUS = 60;      // separation distance
+  const BOID_SEP_STR = 0.00003;    // separation force
+  const BOID_ALI_RADIUS = 150;     // alignment radius
+  const BOID_ALI_STR = 0.00001;    // alignment force
+  const BOID_COH_RADIUS = 200;     // cohesion radius
+  const BOID_COH_STR = 0.000005;   // cohesion force
+  const VERLET_ITERATIONS = 3;     // constraint relaxation passes
+  const DAMPING = 0.997;           // velocity damping
+  const CENTER_PULL = 0.000003;    // very gentle pull to center
+
+  // === DRAG STATE ===
+  let dragging = null;
+  let mouse = { x: W/2, y: H/2, active: false };
+
   function findNode(mx, my) {
-    const grabRadius = 22;
-    let closest = -1, closestDist = grabRadius;
+    let best = -1, bestD = 900;
     for (let i = 0; i < nodes.length; i++) {
       const dx = nodes[i].x - mx, dy = nodes[i].y - my;
-      const d = Math.sqrt(dx * dx + dy * dy);
-      if (d < closestDist) { closestDist = d; closest = i; }
+      const d = dx*dx + dy*dy;
+      if (d < bestD) { bestD = d; best = i; }
     }
-    return closest;
+    return best;
   }
 
-  // --- Pointer handlers ---
-  function onPointerDown(px, py) {
-    mouse.x = px; mouse.y = py; mouse.active = true;
-    const idx = findNode(px, py);
-    if (idx >= 0) {
-      dragging = idx;
-      nodes[idx].dragged = true;
-      nodes[idx].vx = 0; nodes[idx].vy = 0;
-      canvas.style.cursor = 'grabbing';
-    }
-  }
+  canvas.addEventListener('mousedown', e => { e.preventDefault(); const n = findNode(e.clientX, e.clientY); if (n >= 0) { dragging = n; nodes[n].dragged = true; canvas.style.cursor = 'grabbing'; }});
+  addEventListener('mousemove', e => { mouse.x = e.clientX; mouse.y = e.clientY; mouse.active = true; if (dragging !== null) { nodes[dragging].x = e.clientX; nodes[dragging].y = e.clientY; }});
+  addEventListener('mouseup', () => { if (dragging !== null) { const n = nodes[dragging]; n.dragged = false; n.px = n.x; n.py = n.y; dragging = null; } canvas.style.cursor = 'crosshair'; });
+  canvas.addEventListener('touchstart', e => { e.preventDefault(); const t = e.touches[0]; const n = findNode(t.clientX, t.clientY); if (n >= 0) { dragging = n; nodes[n].dragged = true; }}, {passive:false});
+  addEventListener('touchmove', e => { if (dragging !== null) { e.preventDefault(); const t = e.touches[0]; mouse.x = t.clientX; mouse.y = t.clientY; nodes[dragging].x = t.clientX; nodes[dragging].y = t.clientY; }}, {passive:false});
+  addEventListener('touchend', () => { if (dragging !== null) { const n = nodes[dragging]; n.dragged = false; n.px = n.x; n.py = n.y; dragging = null; }});
 
-  function onPointerMove(px, py) {
-    mouse.x = px; mouse.y = py; mouse.active = true;
-    if (dragging !== null) {
-      nodes[dragging].x = px;
-      nodes[dragging].y = py;
-    } else {
-      canvas.style.cursor = findNode(px, py) >= 0 ? 'grab' : 'crosshair';
-    }
-  }
+  // === MAIN LOOP ===
+  let lastT = performance.now();
 
-  function onPointerUp() {
-    if (dragging !== null) {
-      const n = nodes[dragging];
-      n.dragged = false;
-      n.baseX = n.x;
-      n.baseY = n.y;
-      n.vx = 0; n.vy = 0;
-      dragging = null;
-    }
-    canvas.style.cursor = 'crosshair';
-  }
+  function frame(now) {
+    const dt = Math.min(now - lastT, 50);
+    lastT = now;
+    const tSlow = now * 0.00001; // very slow time for curl field
 
-  canvas.addEventListener('mousedown', e => { e.preventDefault(); onPointerDown(e.clientX, e.clientY); });
-  window.addEventListener('mousemove', e => onPointerMove(e.clientX, e.clientY));
-  window.addEventListener('mouseup', () => onPointerUp());
-  canvas.addEventListener('touchstart', e => { e.preventDefault(); onPointerDown(e.touches[0].clientX, e.touches[0].clientY); }, { passive: false });
-  window.addEventListener('touchmove', e => { if (dragging !== null) e.preventDefault(); onPointerMove(e.touches[0].clientX, e.touches[0].clientY); }, { passive: false });
-  window.addEventListener('touchend', () => onPointerUp());
-  window.addEventListener('mouseleave', () => { mouse.active = false; });
-
-  // --- Physics constants ---
-  const SPRING_K = 0.000008;
-  const DAMPING = 0.96;
-  const HOME_PULL = 0.00002;
-  const DRAG_PULL = 0.012;
-  const WANDER_STR = 0.00025;
-  const FLOCK_RADIUS = 80;
-  const FLOCK_STR = 0.00008;
-  const BREATH_AMP = 0.005;
-  const BREATH_SPEED = 0.00005;
-  const BG_CONNECT_DIST = 120;
-  const MOUSE_BG_RADIUS = 180;
-
-  // --- Init ---
-  resize();
-  initBgParticles();
-  generateConstellation();
-
-  window.addEventListener('resize', () => {
-    const oldCx = W / 2, oldCy = H / 2;
-    resize();
-    initBgParticles();
-    // Shift constellation nodes relative to new center
-    const dx = cx() - oldCx, dy = cy() - oldCy;
-    for (const n of nodes) {
-      n.baseX += dx; n.baseY += dy;
-      n.x += dx; n.y += dy;
-    }
-  });
-
-  // --- Main loop ---
-  let lastT = 0;
-
-  function frame(t) {
-    const dt = Math.min(t - lastT, 50);
-    lastT = t;
+    // Step Lorenz attractor
+    lorenzStep(0.001);
+    const lorenzNorm = Math.sqrt(lx*lx + ly*ly + lz*lz) || 1;
 
     ctx.clearRect(0, 0, W, H);
 
-    // ============ BACKGROUND PARTICLES ============
-    const tSlow = t * 0.00002;
-    for (let i = 0; i < bgParticles.length; i++) {
-      const p = bgParticles[i];
+    // --- BACKGROUND PARTICLES ---
+    for (let i = 0; i < bg.length; i++) {
+      const p = bg[i];
+      // Curl noise + Lorenz whisper
+      const c = curl(p.x * CURL_SCALE, p.y * CURL_SCALE, tSlow);
+      p.vx += c.x * 0.0008 + (lx / lorenzNorm) * 0.00001;
+      p.vy += c.y * 0.0008 + (ly / lorenzNorm) * 0.00001;
+      p.vx *= 0.99; p.vy *= 0.99;
+      p.x += p.vx * dt; p.y += p.vy * dt;
+      if (p.x < -10) p.x = W + 10; if (p.x > W + 10) p.x = -10;
+      if (p.y < -10) p.y = H + 10; if (p.y > H + 10) p.y = -10;
 
-      // Noise-driven drift for background particles
-      const nOff = p.noiseOff;
-      const nForceX = noise2(p.x * 0.002 + nOff, p.y * 0.002 + tSlow) * 0.0015;
-      const nForceY = noise2(p.x * 0.002 + tSlow, p.y * 0.002 + nOff) * 0.0015;
-      p.vx += nForceX; p.vy += nForceY;
-
-      p.x += p.vx; p.y += p.vy;
-
-      // Mouse repulsion
-      if (mouse.active) {
-        const dx = p.x - mouse.x, dy = p.y - mouse.y;
-        const dist = Math.sqrt(dx * dx + dy * dy);
-        if (dist < MOUSE_BG_RADIUS && dist > 0) {
-          const force = (1 - dist / MOUSE_BG_RADIUS) * 0.3;
-          p.vx += (dx / dist) * force;
-          p.vy += (dy / dist) * force;
-        }
-      }
-
-      p.vx *= 0.97; p.vy *= 0.97;
-
-      // Wrap
-      if (p.x < -10) p.x = W + 10;
-      if (p.x > W + 10) p.x = -10;
-      if (p.y < -10) p.y = H + 10;
-      if (p.y > H + 10) p.y = -10;
-
-      // Pulsing alpha
-      const aFlicker = p.alpha * (0.7 + 0.3 * Math.sin(t * 0.001 + nOff));
-      ctx.beginPath();
-      ctx.arc(p.x, p.y, p.r, 0, Math.PI * 2);
-      ctx.fillStyle = 'rgba(200,194,184,' + aFlicker + ')';
-      ctx.fill();
+      const flicker = p.alpha * (0.7 + 0.3 * simplex2(now * 0.0001 + p.nOff, p.nOff));
+      ctx.beginPath(); ctx.arc(p.x, p.y, p.r, 0, Math.PI*2);
+      ctx.fillStyle = 'rgba(200,194,184,' + flicker + ')'; ctx.fill();
     }
-
-    // Background particle connections
-    for (let i = 0; i < bgParticles.length; i++) {
-      for (let j = i + 1; j < bgParticles.length; j++) {
-        const a = bgParticles[i], b = bgParticles[j];
-        const dx = a.x - b.x, dy = a.y - b.y;
-        const dist = Math.sqrt(dx * dx + dy * dy);
-        if (dist < BG_CONNECT_DIST) {
-          const alpha = (1 - dist / BG_CONNECT_DIST) * 0.06;
-          ctx.beginPath();
-          ctx.moveTo(a.x, a.y);
-          ctx.lineTo(b.x, b.y);
-          ctx.strokeStyle = 'rgba(200,194,184,' + alpha + ')';
-          ctx.lineWidth = 0.5;
-          ctx.stroke();
+    // BG connections
+    for (let i = 0; i < bg.length; i++) {
+      for (let j = i + 1; j < bg.length; j++) {
+        const dx = bg[i].x - bg[j].x, dy = bg[i].y - bg[j].y;
+        const d2 = dx*dx + dy*dy;
+        if (d2 < 6400) {
+          ctx.beginPath(); ctx.moveTo(bg[i].x, bg[i].y); ctx.lineTo(bg[j].x, bg[j].y);
+          ctx.strokeStyle = 'rgba(200,194,184,' + (0.04 * (1 - d2/6400)) + ')';
+          ctx.lineWidth = 0.4; ctx.stroke();
         }
       }
     }
 
-    // ============ CONSTELLATION PHYSICS ============
-    const breath = 1 + Math.sin(t * BREATH_SPEED) * BREATH_AMP;
-    const interactR = 200;
-
-    // Noise-driven wander + slow base drift + soft home pull
-    for (const n of nodes) {
-      if (n.dragged) continue;
-      const nt = t * n.noiseSpeed;
-
-      // Simplex noise wander — each node samples its own unique region
-      const wx = noise2(nt + n.noiseOffX, n.noiseOffY);
-      const wy = noise2(n.noiseOffX, nt + n.noiseOffY);
-      const wtx = n.baseX + wx * n.wanderRadius;
-      const wty = n.baseY + wy * n.wanderRadius;
-
-      const f = dt * 0.06;
-      n.vx += (wtx - n.x) * WANDER_STR * f;
-      n.vy += (wty - n.y) * WANDER_STR * f;
-
-      // Slow base drift — the "home" itself migrates over time
-      const driftAngle = n.driftAngle + noise2(t * n.driftChangeSpeed + n.driftOff, n.driftOff) * Math.PI;
-      n.baseX += Math.cos(driftAngle) * n.driftSpeed * dt * 0.06;
-      n.baseY += Math.sin(driftAngle) * n.driftSpeed * dt * 0.06;
-
-      // Soft pull back toward original region (prevents drifting offscreen)
-      n.baseX += (cx() - n.baseX) * 0.0001;
-      n.baseY += (cy() - n.baseY) * 0.0001;
-
-      // Very gentle home pull so nodes explore freely
-      n.vx += (n.baseX - n.x) * HOME_PULL * dt * 0.06;
-      n.vy += (n.baseY - n.y) * HOME_PULL * dt * 0.06;
-    }
-
-    // Flocking: nearby nodes gently pull each other along
+    // --- CONSTELLATION PHYSICS (Verlet + forces) ---
     for (let i = 0; i < nodes.length; i++) {
-      if (nodes[i].dragged) continue;
-      for (let j = i + 1; j < nodes.length; j++) {
-        if (nodes[j].dragged) continue;
-        const a = nodes[i], b = nodes[j];
+      const n = nodes[i];
+      if (n.dragged) continue;
+
+      // Current velocity (Verlet: v ≈ x - px)
+      let vx = (n.x - n.px) * DAMPING;
+      let vy = (n.y - n.py) * DAMPING;
+
+      // 1. N-BODY GRAVITY
+      for (let j = 0; j < nodes.length; j++) {
+        if (j === i) continue;
+        const m = nodes[j];
+        const dx = m.x - n.x, dy = m.y - n.y;
+        const d2 = dx*dx + dy*dy + GRAVITY_SOFTENING * GRAVITY_SOFTENING;
+        const d = Math.sqrt(d2);
+        const F = GRAVITY_G * n.mass * m.mass / d2;
+        vx += (dx / d) * F * dt;
+        vy += (dy / d) * F * dt;
+      }
+
+      // 2. CURL NOISE FLOW
+      const c = curl(n.x * CURL_SCALE, n.y * CURL_SCALE, tSlow);
+      vx += c.x * CURL_STRENGTH * dt;
+      vy += c.y * CURL_STRENGTH * dt;
+
+      // 3. LORENZ ATTRACTOR WHISPER
+      vx += (lx / lorenzNorm) * LORENZ_INFLUENCE * dt;
+      vy += (ly / lorenzNorm) * LORENZ_INFLUENCE * dt;
+
+      // 4. BOIDS
+      let sepX = 0, sepY = 0, aliVx = 0, aliVy = 0, aliCount = 0;
+      let cohX = 0, cohY = 0, cohCount = 0;
+      for (let j = 0; j < nodes.length; j++) {
+        if (j === i) continue;
+        const m = nodes[j];
+        const dx = n.x - m.x, dy = n.y - m.y;
+        const d = Math.sqrt(dx*dx + dy*dy) || 1;
+        // Separation
+        if (d < BOID_SEP_RADIUS) {
+          sepX += (dx / d) / d;
+          sepY += (dy / d) / d;
+        }
+        // Alignment
+        if (d < BOID_ALI_RADIUS) {
+          aliVx += m.x - m.px; aliVy += m.y - m.py;
+          aliCount++;
+        }
+        // Cohesion
+        if (d < BOID_COH_RADIUS) {
+          cohX += m.x; cohY += m.y;
+          cohCount++;
+        }
+      }
+      vx += sepX * BOID_SEP_STR * dt;
+      vy += sepY * BOID_SEP_STR * dt;
+      if (aliCount > 0) {
+        vx += (aliVx / aliCount - vx) * BOID_ALI_STR * dt;
+        vy += (aliVy / aliCount - vy) * BOID_ALI_STR * dt;
+      }
+      if (cohCount > 0) {
+        vx += (cohX / cohCount - n.x) * BOID_COH_STR * dt;
+        vy += (cohY / cohCount - n.y) * BOID_COH_STR * dt;
+      }
+
+      // 5. Gentle center pull
+      vx += (cx() - n.x) * CENTER_PULL * dt;
+      vy += (cy() - n.y) * CENTER_PULL * dt;
+
+      // Verlet integration
+      n.px = n.x;
+      n.py = n.y;
+      n.x += vx;
+      n.y += vy;
+    }
+
+    // 6. VERLET EDGE CONSTRAINTS (relaxation)
+    for (let iter = 0; iter < VERLET_ITERATIONS; iter++) {
+      for (const e of edges) {
+        const a = nodes[e.a], b = nodes[e.b];
+        if (a.dragged || b.dragged) continue;
         const dx = b.x - a.x, dy = b.y - a.y;
-        const dist = Math.sqrt(dx * dx + dy * dy);
-        if (dist < FLOCK_RADIUS && dist > 0) {
-          const influence = (1 - dist / FLOCK_RADIUS) * FLOCK_STR;
-          // Align velocities (flocking cohesion)
-          const avgVx = (a.vx + b.vx) * 0.5;
-          const avgVy = (a.vy + b.vy) * 0.5;
-          a.vx += (avgVx - a.vx) * influence;
-          a.vy += (avgVy - a.vy) * influence;
-          b.vx += (avgVx - b.vx) * influence;
-          b.vy += (avgVy - b.vy) * influence;
-        }
+        const d = Math.sqrt(dx*dx + dy*dy) || 0.01;
+        const diff = (d - e.restLen) / d * 0.15; // soft relaxation
+        const ox = dx * diff, oy = dy * diff;
+        const totalMass = a.mass + b.mass;
+        const ra = b.mass / totalMass, rb = a.mass / totalMass;
+        a.x += ox * ra; a.y += oy * ra;
+        b.x -= ox * rb; b.y -= oy * rb;
       }
     }
 
-    // Spring forces
+    // --- DRAW EDGES ---
     for (const e of edges) {
       const a = nodes[e.a], b = nodes[e.b];
       const dx = b.x - a.x, dy = b.y - a.y;
-      const dist = Math.sqrt(dx * dx + dy * dy) || 0.01;
-      const stretch = dist - e.restLength;
-      const fx = (dx / dist) * stretch * SPRING_K * dt;
-      const fy = (dy / dist) * stretch * SPRING_K * dt;
-      if (!a.dragged) { a.vx += fx; a.vy += fy; }
-      if (!b.dragged) { b.vx -= fx; b.vy -= fy; }
-      if (a.dragged && !b.dragged) {
-        b.vx += (a.x - b.x) * DRAG_PULL;
-        b.vy += (a.y - b.y) * DRAG_PULL;
-      }
-      if (b.dragged && !a.dragged) {
-        a.vx += (b.x - a.x) * DRAG_PULL;
-        a.vy += (b.y - a.y) * DRAG_PULL;
-      }
+      const d = Math.sqrt(dx*dx + dy*dy) || 1;
+      const stretch = Math.abs(d - e.restLen) / e.restLen;
+      const alpha = 0.08 + stretch * 0.15;
+
+      ctx.beginPath(); ctx.moveTo(a.x, a.y); ctx.lineTo(b.x, b.y);
+      ctx.strokeStyle = 'rgba(200,194,184,' + Math.min(alpha, 0.2) + ')';
+      ctx.lineWidth = 0.6; ctx.stroke();
+
+      // Energy particle along edge
+      e.energy = (e.energy + 0.0003 * dt) % 1;
+      const ex = a.x + dx * e.energy, ey = a.y + dy * e.energy;
+      const ealpha = 0.3 + 0.2 * Math.sin(e.energy * Math.PI);
+      ctx.beginPath(); ctx.arc(ex, ey, 1, 0, Math.PI*2);
+      ctx.fillStyle = 'rgba(220,216,208,' + ealpha + ')'; ctx.fill();
     }
 
-    // Integrate
+    // --- DRAW NODES ---
     for (const n of nodes) {
-      if (n.dragged) { n.vx = 0; n.vy = 0; continue; }
-      n.vx *= DAMPING; n.vy *= DAMPING;
-      n.x += n.vx; n.y += n.vy;
-      // Mouse hover push
-      if (mouse.active && dragging === null) {
-        const dx = mouse.x - n.x, dy = mouse.y - n.y;
-        const dist = Math.sqrt(dx * dx + dy * dy);
-        if (dist < interactR && dist > 0) {
-          const s = (1 - dist / interactR) * 12;
-          n.x += (dx / dist) * s * 0.08;
-          n.y += (dy / dist) * s * 0.08;
-        }
-      }
-    }
-
-    // ============ DRAW CONSTELLATION ============
-    // Apply breathing around constellation center
-    const ccx = cx(), ccy = cy();
-    ctx.save();
-    ctx.translate(ccx, ccy);
-    ctx.scale(breath, breath);
-    ctx.translate(-ccx, -ccy);
-
-    // Edges + energy particles
-    for (const e of edges) {
-      const a = nodes[e.a], b = nodes[e.b];
-      const dx = b.x - a.x, dy = b.y - a.y;
-      const len = Math.sqrt(dx * dx + dy * dy);
-      const basePulse = 0.08 + 0.06 * Math.sin(t * e.pulseSpeed + e.pulseOffset);
-      const tension = Math.abs(len - e.restLength) / (e.restLength || 1);
-      const tensionGlow = Math.min(tension * 0.8, 0.4);
-
-      let edgeGlow = 0;
-      if (mouse.active) {
-        const mx = (a.x + b.x) / 2, my = (a.y + b.y) / 2;
-        const md = Math.sqrt((mouse.x - mx) ** 2 + (mouse.y - my) ** 2);
-        if (md < interactR) edgeGlow = (1 - md / interactR) * 0.25;
-      }
-
-      const alpha = basePulse + edgeGlow + tensionGlow;
-      ctx.beginPath();
-      ctx.moveTo(a.x, a.y);
-      ctx.lineTo(b.x, b.y);
-      ctx.strokeStyle = 'rgba(200,194,184,' + alpha + ')';
-      ctx.lineWidth = 0.8 + (edgeGlow + tensionGlow) * 3;
-      ctx.stroke();
-
-      // Energy particles
-      if (len > 5) {
-        for (const po of e.particles) {
-          const spd = 0.00006 + po * 0.00008;
-          const prog = ((t * spd + po * Math.PI * 2) % (Math.PI * 2)) / (Math.PI * 2);
-          const ex = a.x + dx * prog;
-          const ey = a.y + dy * prog;
-          const ea = (0.3 + edgeGlow * 1.5 + tensionGlow) * (0.6 + 0.4 * Math.sin(t * 0.003 + po * 5));
-          const er = 1.0 + edgeGlow * 2 + tensionGlow * 2;
-
-          const grad = ctx.createRadialGradient(ex, ey, 0, ex, ey, er * 4);
-          grad.addColorStop(0, 'rgba(220,216,208,' + (ea * 0.6) + ')');
-          grad.addColorStop(1, 'rgba(220,216,208,0)');
-          ctx.beginPath();
-          ctx.arc(ex, ey, er * 4, 0, Math.PI * 2);
-          ctx.fillStyle = grad;
-          ctx.fill();
-
-          ctx.beginPath();
-          ctx.arc(ex, ey, er, 0, Math.PI * 2);
-          ctx.fillStyle = 'rgba(235,232,225,' + ea + ')';
-          ctx.fill();
-        }
-      }
-    }
-
-    // Nodes
-    for (const n of nodes) {
-      const pulse = n.brightness * (0.5 + 0.5 * Math.sin(t * n.speed + n.phase));
-      const r = n.r * (0.85 + 0.15 * Math.sin(t * n.speed * 0.7 + n.phase));
-
-      let glowBoost = 0;
-      if (n.dragged) {
-        glowBoost = 1.0;
-      } else if (mouse.active) {
-        const dx = mouse.x - n.x, dy = mouse.y - n.y;
-        const dist = Math.sqrt(dx * dx + dy * dy);
-        if (dist < interactR) glowBoost = 1 - dist / interactR;
-      }
-
-      const velMag = Math.sqrt(n.vx * n.vx + n.vy * n.vy);
-      const velGlow = Math.min(velMag * 0.15, 0.3);
-      const total = pulse + glowBoost * 0.7 + velGlow;
-
-      // Bloom
-      const bloomR = r * (3 + glowBoost * 4 + velGlow * 3);
-      const grad = ctx.createRadialGradient(n.x, n.y, 0, n.x, n.y, bloomR);
-      grad.addColorStop(0, 'rgba(210,205,195,' + (total * 0.3) + ')');
-      grad.addColorStop(0.5, 'rgba(210,205,195,' + (total * 0.08) + ')');
-      grad.addColorStop(1, 'rgba(210,205,195,0)');
-      ctx.beginPath();
-      ctx.arc(n.x, n.y, bloomR, 0, Math.PI * 2);
-      ctx.fillStyle = grad;
-      ctx.fill();
-
+      const pulse = n.brightness * (0.4 + 0.2 * Math.sin(now * 0.0001 + n.phase));
+      // Glow
+      const grd = ctx.createRadialGradient(n.x, n.y, 0, n.x, n.y, n.r * 4);
+      grd.addColorStop(0, 'rgba(220,216,208,' + pulse * 0.3 + ')');
+      grd.addColorStop(1, 'rgba(220,216,208,0)');
+      ctx.beginPath(); ctx.arc(n.x, n.y, n.r * 4, 0, Math.PI*2);
+      ctx.fillStyle = grd; ctx.fill();
       // Core
-      ctx.beginPath();
-      ctx.arc(n.x, n.y, r * (n.dragged ? 1.3 : 1), 0, Math.PI * 2);
-      ctx.fillStyle = 'rgba(235,230,222,' + Math.min(total, 1) + ')';
-      ctx.fill();
+      ctx.beginPath(); ctx.arc(n.x, n.y, n.r, 0, Math.PI*2);
+      ctx.fillStyle = 'rgba(224,220,212,' + pulse + ')'; ctx.fill();
     }
 
-    ctx.restore();
     requestAnimationFrame(frame);
   }
 
