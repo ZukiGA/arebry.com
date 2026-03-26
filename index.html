@@ -158,8 +158,8 @@
 
   function generateConstellation() {
     seed = seedStart;
-    const spread = Math.min(W, H) * 0.28;
-    const nodeCount = 7 + Math.floor(rng() * 6);
+    const spread = Math.min(W, H) * 0.35;
+    const nodeCount = 18 + Math.floor(rng() * 10);
     nodes = [];
 
     for (let i = 0; i < nodeCount; i++) {
@@ -179,11 +179,11 @@
         // Noise-based wander — each node samples unique region of noise space
         noiseOffX: rng() * 300 + 100,
         noiseOffY: rng() * 300 + 100,
-        noiseSpeed: 0.0000015 + rng() * 0.000003,
+        noiseSpeed: 0.0000008 + rng() * 0.0000015,
         wanderRadius: 25 + rng() * 45,
         // Very slow base drift
         driftAngle: rng() * Math.PI * 2,
-        driftSpeed: 0.00006 + rng() * 0.00015,
+        driftSpeed: 0.00003 + rng() * 0.00008,
         driftChangeSpeed: 0.0000008 + rng() * 0.0000015,
         driftOff: rng() * 300 + 200,
       });
@@ -286,7 +286,7 @@
   const DAMPING = 0.96;
   const HOME_PULL = 0.00002;
   const DRAG_PULL = 0.012;
-  const WANDER_STR = 0.001;
+  const WANDER_STR = 0.0005;
   const FLOCK_RADIUS = 200;
   const FLOCK_STR = 0.0005;
   const BREATH_AMP = 0.005;
