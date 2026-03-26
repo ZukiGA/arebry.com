@@ -156,7 +156,7 @@
   // === PHYSICS CONSTANTS (all tuned for SLOW meditative motion) ===
   const GRAVITY_G = 0.00004;       // n-body gravitational constant (reduced — was collapsing)
   const GRAVITY_SOFTENING = 40;    // prevents singularity
-  const LJ_EPSILON = 0.00004;       // Lennard-Jones well depth
+  const LJ_EPSILON = 0.000008;       // Lennard-Jones well depth (gentler)
   const LJ_SIGMA = Math.min(W, H) * 0.12; // equilibrium distance scales with screen
   const CURL_STRENGTH = 0.00004;   // curl noise turbulence
   const CURL_SCALE = 0.003;        // noise sample scale
