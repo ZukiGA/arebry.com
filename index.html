@@ -23,20 +23,19 @@
     width: 100%; height: 100%;
     z-index: 0;
   }
-  .content {
-    position: relative;
+  canvas#glyph {
+    position: fixed;
+    top: 50%; left: 50%;
+    transform: translate(-50%, -50%);
     z-index: 1;
-    text-align: center;
-    display: flex;
-    flex-direction: column;
-    align-items: center;
-    gap: 2.4rem;
-  }
-  .glyph {
-    width: 120px; height: 120px;
-    position: relative;
+    cursor: crosshair;
   }
   .links {
+    position: fixed;
+    bottom: 2.5rem;
+    left: 50%;
+    transform: translateX(-50%);
+    z-index: 2;
     display: flex;
     gap: 1.6rem;
     flex-wrap: wrap;
@@ -66,14 +65,12 @@
 </head>
 <body>
 <canvas id="bg"></canvas>
-<div class="content">
-  <canvas id="glyph" class="glyph" width="240" height="240"></canvas>
-  <nav class="links">
-    <a href="https://nemi.tech" target="_blank" rel="noopener">nemi.tech</a>
-    <span class="dot">&middot;</span>
-    <a href="https://postalviviente.com" target="_blank" rel="noopener">postalviviente.com</a>
-  </nav>
-</div>
+<canvas id="glyph"></canvas>
+<nav class="links">
+  <a href="https://nemi.tech" target="_blank" rel="noopener">nemi.tech</a>
+  <span class="dot">&middot;</span>
+  <a href="https://postalviviente.com" target="_blank" rel="noopener">postalviviente.com</a>
+</nav>
 <script>
 // --- Background particles ---
 (function () {
@@ -93,16 +90,16 @@
   function init() {
     resize();
     mouse = { x: window.innerWidth / 2, y: window.innerHeight / 2 };
-    const count = Math.min(Math.floor((window.innerWidth * window.innerHeight) / 6000), 200);
+    const count = Math.min(Math.floor((window.innerWidth * window.innerHeight) / 8000), 150);
     particles = [];
     for (let i = 0; i < count; i++) {
       particles.push({
         x: Math.random() * window.innerWidth,
         y: Math.random() * window.innerHeight,
-        vx: (Math.random() - 0.5) * 0.25,
-        vy: (Math.random() - 0.5) * 0.25,
-        r: Math.random() * 1.4 + 0.4,
-        alpha: Math.random() * 0.35 + 0.08,
+        vx: (Math.random() - 0.5) * 0.2,
+        vy: (Math.random() - 0.5) * 0.2,
+        r: Math.random() * 1.2 + 0.3,
+        alpha: Math.random() * 0.25 + 0.05,
       });
     }
   }
@@ -114,13 +111,7 @@
     for (let i = 0; i < particles.length; i++) {
       const p = particles[i];
       p.x += p.vx; p.y += p.vy;
-      const dx = mouse.x - p.x, dy = mouse.y - p.y;
-      const dist = Math.sqrt(dx * dx + dy * dy);
-      if (dist < 220) {
-        const force = (220 - dist) / 220 * 0.003;
-        p.vx += dx * force; p.vy += dy * force;
-      }
-      p.vx *= 0.995; p.vy *= 0.995;
+      p.vx *= 0.998; p.vy *= 0.998;
       if (p.x < -10) p.x = vw + 10;
       if (p.x > vw + 10) p.x = -10;
       if (p.y < -10) p.y = vh + 10;
@@ -129,97 +120,259 @@
       ctx.arc(p.x, p.y, p.r, 0, Math.PI * 2);
       ctx.fillStyle = 'rgba(200,194,184,' + p.alpha + ')';
       ctx.fill();
-      for (let j = i + 1; j < particles.length; j++) {
-        const q = particles[j];
-        const ddx = p.x - q.x, ddy = p.y - q.y;
-        const d = ddx * ddx + ddy * ddy;
-        if (d < 8100) {
-          ctx.beginPath();
-          ctx.moveTo(p.x, p.y); ctx.lineTo(q.x, q.y);
-          ctx.strokeStyle = 'rgba(200,194,184,' + (0.06 * (1 - d / 8100)) + ')';
-          ctx.lineWidth = 0.5;
-          ctx.stroke();
-        }
-      }
     }
     requestAnimationFrame(draw);
   }
 
   window.addEventListener('resize', resize);
-  window.addEventListener('mousemove', (e) => { mouse.x = e.clientX; mouse.y = e.clientY; });
-  window.addEventListener('touchmove', (e) => { mouse.x = e.touches[0].clientX; mouse.y = e.touches[0].clientY; }, { passive: true });
   init(); draw();
 })();
 
-// --- Generative glyph (mini constellation) ---
+// --- Generative glyph (interactive constellation) ---
 (function () {
   const canvas = document.getElementById('glyph');
   const ctx = canvas.getContext('2d');
-  const size = 120;
   const dpr = Math.min(window.devicePixelRatio || 1, 2);
-  canvas.width = size * dpr;
-  canvas.height = size * dpr;
-  canvas.style.width = size + 'px';
-  canvas.style.height = size + 'px';
-  ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
 
-  // Seed from date so it changes daily
-  const seed = new Date().toDateString();
+  // Size: fill a large portion of the viewport
+  let size;
+  function resize() {
+    size = Math.min(window.innerWidth, window.innerHeight) * 0.7;
+    size = Math.max(size, 280);
+    canvas.width = size * dpr;
+    canvas.height = size * dpr;
+    canvas.style.width = size + 'px';
+    canvas.style.height = size + 'px';
+    ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+  }
+  resize();
+  window.addEventListener('resize', () => { resize(); generateConstellation(); });
+
+  // Seed from date
+  const seedStr = new Date().toDateString();
   let s = 0;
-  for (let i = 0; i < seed.length; i++) s = ((s << 5) - s + seed.charCodeAt(i)) | 0;
+  for (let i = 0; i < seedStr.length; i++) s = ((s << 5) - s + seedStr.charCodeAt(i)) | 0;
   function rng() { s = (s * 16807 + 0) % 2147483647; return (s & 0x7fffffff) / 2147483647; }
 
-  // Generate constellation nodes
-  const cx = size / 2, cy = size / 2;
-  const nodeCount = 5 + Math.floor(rng() * 4); // 5-8 nodes
-  const nodes = [];
-  for (let i = 0; i < nodeCount; i++) {
-    const angle = rng() * Math.PI * 2;
-    const dist = 12 + rng() * 38;
-    nodes.push({
-      x: cx + Math.cos(angle) * dist,
-      y: cy + Math.sin(angle) * dist,
-      r: 1.5 + rng() * 2.5,
-      phase: rng() * Math.PI * 2,
-      speed: 0.005 + rng() * 0.015,
-    });
+  // Mouse tracking (relative to canvas center)
+  let mouse = { x: 0, y: 0, active: false };
+  const glyphEl = canvas;
+
+  function updateMouse(cx, cy) {
+    const rect = glyphEl.getBoundingClientRect();
+    mouse.x = cx - rect.left - rect.width / 2;
+    mouse.y = cy - rect.top - rect.height / 2;
+    mouse.active = true;
   }
 
-  // Generate edges (connect nearby nodes)
-  const edges = [];
-  for (let i = 0; i < nodes.length; i++) {
-    for (let j = i + 1; j < nodes.length; j++) {
-      const dx = nodes[i].x - nodes[j].x, dy = nodes[i].y - nodes[j].y;
-      if (Math.sqrt(dx * dx + dy * dy) < 45 && rng() > 0.3) {
-        edges.push([i, j]);
+  window.addEventListener('mousemove', (e) => updateMouse(e.clientX, e.clientY));
+  window.addEventListener('touchmove', (e) => {
+    updateMouse(e.touches[0].clientX, e.touches[0].clientY);
+  }, { passive: true });
+  window.addEventListener('touchstart', (e) => {
+    updateMouse(e.touches[0].clientX, e.touches[0].clientY);
+  }, { passive: true });
+  window.addEventListener('mouseleave', () => { mouse.active = false; });
+  window.addEventListener('touchend', () => { mouse.active = false; });
+
+  // Generate constellation
+  let nodes = [], edges = [], orbitAngle = 0;
+
+  function generateConstellation() {
+    // Reset seed for consistent daily generation
+    s = 0;
+    for (let i = 0; i < seedStr.length; i++) s = ((s << 5) - s + seedStr.charCodeAt(i)) | 0;
+
+    const cx = 0, cy = 0;
+    const radius = size * 0.38;
+    const nodeCount = 7 + Math.floor(rng() * 6); // 7-12 nodes
+    nodes = [];
+
+    for (let i = 0; i < nodeCount; i++) {
+      const angle = rng() * Math.PI * 2;
+      const dist = radius * (0.15 + rng() * 0.85);
+      const baseX = Math.cos(angle) * dist;
+      const baseY = Math.sin(angle) * dist;
+      const brightness = 0.3 + rng() * 0.7; // some nodes are brighter
+      nodes.push({
+        baseX, baseY,
+        x: baseX, y: baseY,
+        r: 2 + rng() * 4,
+        phase: rng() * Math.PI * 2,
+        speed: 0.003 + rng() * 0.012,
+        brightness,
+        orbitR: 1 + rng() * 3, // subtle orbital drift radius
+        orbitSpeed: 0.0004 + rng() * 0.001,
+        orbitPhase: rng() * Math.PI * 2,
+      });
+    }
+
+    // Generate edges (connect nearby nodes + ensure connectivity)
+    edges = [];
+    const maxEdgeDist = radius * 0.7;
+    for (let i = 0; i < nodes.length; i++) {
+      for (let j = i + 1; j < nodes.length; j++) {
+        const dx = nodes[i].baseX - nodes[j].baseX;
+        const dy = nodes[i].baseY - nodes[j].baseY;
+        const d = Math.sqrt(dx * dx + dy * dy);
+        if (d < maxEdgeDist && rng() > 0.35) {
+          edges.push({
+            a: i, b: j,
+            pulseOffset: rng() * Math.PI * 2,
+            pulseSpeed: 0.0008 + rng() * 0.002,
+            energySpeed: 0.0005 + rng() * 0.002, // energy traveling along edge
+          });
+        }
+      }
+    }
+
+    // Ensure each node has at least one connection
+    for (let i = 0; i < nodes.length; i++) {
+      const hasEdge = edges.some(e => e.a === i || e.b === i);
+      if (!hasEdge) {
+        let closest = -1, closestDist = Infinity;
+        for (let j = 0; j < nodes.length; j++) {
+          if (j === i) continue;
+          const dx = nodes[i].baseX - nodes[j].baseX;
+          const dy = nodes[i].baseY - nodes[j].baseY;
+          const d = dx * dx + dy * dy;
+          if (d < closestDist) { closestDist = d; closest = j; }
+        }
+        if (closest >= 0) {
+          const a = Math.min(i, closest), b = Math.max(i, closest);
+          edges.push({ a, b, pulseOffset: rng() * Math.PI * 2, pulseSpeed: 0.001, energySpeed: 0.001 });
+        }
       }
     }
   }
 
+  generateConstellation();
+
   function draw(t) {
     ctx.clearRect(0, 0, size, size);
+    ctx.save();
+    ctx.translate(size / 2, size / 2);
 
-    // Draw edges
-    for (const [i, j] of edges) {
-      const a = nodes[i], b = nodes[j];
-      const pulse = 0.12 + 0.06 * Math.sin(t * 0.001 + a.phase);
-      ctx.beginPath();
-      ctx.moveTo(a.x, a.y); ctx.lineTo(b.x, b.y);
-      ctx.strokeStyle = 'rgba(200,194,184,' + pulse + ')';
-      ctx.lineWidth = 0.6;
-      ctx.stroke();
+    // Global slow rotation
+    orbitAngle = t * 0.00003;
+
+    const interactRadius = size * 0.35;
+
+    // Update node positions with orbital drift + mouse interaction
+    for (const n of nodes) {
+      // Orbital drift
+      const ox = Math.cos(t * n.orbitSpeed + n.orbitPhase) * n.orbitR;
+      const oy = Math.sin(t * n.orbitSpeed + n.orbitPhase) * n.orbitR;
+
+      // Rotate around center
+      const cos = Math.cos(orbitAngle), sin = Math.sin(orbitAngle);
+      const rx = (n.baseX + ox) * cos - (n.baseY + oy) * sin;
+      const ry = (n.baseX + ox) * sin + (n.baseY + oy) * cos;
+
+      n.x = rx;
+      n.y = ry;
+
+      // Mouse interaction: pull toward cursor, glow brighter
+      if (mouse.active) {
+        const dx = mouse.x - n.x;
+        const dy = mouse.y - n.y;
+        const dist = Math.sqrt(dx * dx + dy * dy);
+        if (dist < interactRadius && dist > 0) {
+          const strength = (1 - dist / interactRadius) * 18;
+          n.x += (dx / dist) * strength;
+          n.y += (dy / dist) * strength;
+        }
+      }
     }
 
-    // Draw nodes
+    // Draw edges with energy pulses
+    for (const e of edges) {
+      const a = nodes[e.a], b = nodes[e.b];
+      const dx = b.x - a.x, dy = b.y - a.y;
+      const len = Math.sqrt(dx * dx + dy * dy);
+
+      // Base edge
+      const basePulse = 0.08 + 0.06 * Math.sin(t * e.pulseSpeed + e.pulseOffset);
+
+      // Mouse proximity boost for edge
+      let edgeGlow = 0;
+      if (mouse.active) {
+        const midX = (a.x + b.x) / 2, midY = (a.y + b.y) / 2;
+        const mDist = Math.sqrt((mouse.x - midX) ** 2 + (mouse.y - midY) ** 2);
+        if (mDist < interactRadius) {
+          edgeGlow = (1 - mDist / interactRadius) * 0.25;
+        }
+      }
+
+      // Draw main edge line
+      ctx.beginPath();
+      ctx.moveTo(a.x, a.y);
+      ctx.lineTo(b.x, b.y);
+      ctx.strokeStyle = `rgba(200,194,184,${basePulse + edgeGlow})`;
+      ctx.lineWidth = 0.8 + edgeGlow * 3;
+      ctx.stroke();
+
+      // Energy particle traveling along edge
+      if (len > 5) {
+        const progress = ((t * e.energySpeed + e.pulseOffset) % (Math.PI * 2)) / (Math.PI * 2);
+        const ex = a.x + dx * progress;
+        const ey = a.y + dy * progress;
+        const eAlpha = 0.4 + edgeGlow * 1.5;
+        const eRadius = 1.2 + edgeGlow * 2;
+
+        // Glow
+        const grad = ctx.createRadialGradient(ex, ey, 0, ex, ey, eRadius * 4);
+        grad.addColorStop(0, `rgba(220,216,208,${eAlpha * 0.6})`);
+        grad.addColorStop(1, 'rgba(220,216,208,0)');
+        ctx.beginPath();
+        ctx.arc(ex, ey, eRadius * 4, 0, Math.PI * 2);
+        ctx.fillStyle = grad;
+        ctx.fill();
+
+        // Core
+        ctx.beginPath();
+        ctx.arc(ex, ey, eRadius, 0, Math.PI * 2);
+        ctx.fillStyle = `rgba(235,232,225,${eAlpha})`;
+        ctx.fill();
+      }
+    }
+
+    // Draw nodes with glow/bloom
     for (const n of nodes) {
-      const pulse = 0.4 + 0.3 * Math.sin(t * n.speed + n.phase);
+      const pulse = n.brightness * (0.5 + 0.5 * Math.sin(t * n.speed + n.phase));
       const r = n.r * (0.85 + 0.15 * Math.sin(t * n.speed * 0.7 + n.phase));
+
+      // Mouse proximity glow boost
+      let glowBoost = 0;
+      if (mouse.active) {
+        const dx = mouse.x - n.x, dy = mouse.y - n.y;
+        const dist = Math.sqrt(dx * dx + dy * dy);
+        if (dist < interactRadius) {
+          glowBoost = (1 - dist / interactRadius);
+        }
+      }
+
+      const totalBrightness = pulse + glowBoost * 0.7;
+
+      // Outer bloom
+      const bloomR = r * (3 + glowBoost * 4);
+      const grad = ctx.createRadialGradient(n.x, n.y, 0, n.x, n.y, bloomR);
+      grad.addColorStop(0, `rgba(210,205,195,${totalBrightness * 0.3})`);
+      grad.addColorStop(0.5, `rgba(210,205,195,${totalBrightness * 0.08})`);
+      grad.addColorStop(1, 'rgba(210,205,195,0)');
+      ctx.beginPath();
+      ctx.arc(n.x, n.y, bloomR, 0, Math.PI * 2);
+      ctx.fillStyle = grad;
+      ctx.fill();
+
+      // Core node
       ctx.beginPath();
       ctx.arc(n.x, n.y, r, 0, Math.PI * 2);
-      ctx.fillStyle = 'rgba(224,220,212,' + pulse + ')';
+      ctx.fillStyle = `rgba(235,230,222,${Math.min(totalBrightness, 1)})`;
       ctx.fill();
     }
 
+    ctx.restore();
     requestAnimationFrame(draw);
   }
 
