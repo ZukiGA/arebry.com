@@ -116,14 +116,17 @@
     const x = W * (margin + rng() * (1 - 2 * margin));
     const y = H * (margin + rng() * (1 - 2 * margin));
     const mass = 0.5 + rng() * 2;
+    const tints = [[224,220,212],[224,220,212],[224,220,212],[235,210,180],[180,210,235],[210,190,230]];
+    const tint = tints[Math.floor(rng() * tints.length)];
     nodes.push({
       x, y, px: x, py: y,
-      homeX: x, homeY: y, // each node remembers where it was born
+      homeX: x, homeY: y,
       mass,
       r: 1.5 + mass * 1.8,
       brightness: 0.3 + rng() * 0.7,
       phase: rng() * Math.PI * 2,
       nOff: rng() * 500,
+      tint,
       dragged: false
     });
   }
@@ -344,15 +347,16 @@
     // --- DRAW NODES ---
     for (const n of nodes) {
       const pulse = n.brightness * (0.6 + 0.3 * Math.sin(now * 0.0001 + n.phase));
+      const [tr, tg, tb] = n.tint;
       // Glow
       const grd = ctx.createRadialGradient(n.x, n.y, 0, n.x, n.y, n.r * 5);
-      grd.addColorStop(0, 'rgba(230,226,218,' + pulse * 0.5 + ')');
-      grd.addColorStop(1, 'rgba(230,226,218,0)');
+      grd.addColorStop(0, 'rgba(' + tr + ',' + tg + ',' + tb + ',' + pulse * 0.5 + ')');
+      grd.addColorStop(1, 'rgba(' + tr + ',' + tg + ',' + tb + ',0)');
       ctx.beginPath(); ctx.arc(n.x, n.y, n.r * 5, 0, Math.PI*2);
       ctx.fillStyle = grd; ctx.fill();
       // Core
       ctx.beginPath(); ctx.arc(n.x, n.y, n.r, 0, Math.PI*2);
-      ctx.fillStyle = 'rgba(240,236,228,' + (pulse + 0.15) + ')'; ctx.fill();
+      ctx.fillStyle = 'rgba(' + tr + ',' + tg + ',' + tb + ',' + (pulse + 0.15) + ')'; ctx.fill();
     }
 
     requestAnimationFrame(frame);
