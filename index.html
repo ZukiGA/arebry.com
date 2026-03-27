@@ -228,6 +228,31 @@
 
     ctx.clearRect(0, 0, W, H);
 
+    // --- NEBULA (subtle colored clouds) ---
+    if (!frame.nebulaCache) {
+      // Pre-render nebula to offscreen canvas (static, only once)
+      const nc = document.createElement('canvas');
+      nc.width = W; nc.height = H;
+      const nctx = nc.getContext('2d');
+      const nebulae = [
+        { x: W * 0.2, y: H * 0.3, rx: W * 0.25, ry: H * 0.2, color: [60, 40, 80] },
+        { x: W * 0.75, y: H * 0.6, rx: W * 0.2, ry: H * 0.25, color: [30, 50, 70] },
+        { x: W * 0.5, y: H * 0.8, rx: W * 0.3, ry: H * 0.15, color: [70, 40, 40] },
+      ];
+      for (const nb of nebulae) {
+        const grd = nctx.createRadialGradient(nb.x, nb.y, 0, nb.x, nb.y, Math.max(nb.rx, nb.ry));
+        const [r, g, b] = nb.color;
+        grd.addColorStop(0, 'rgba(' + r + ',' + g + ',' + b + ',0.035)');
+        grd.addColorStop(0.5, 'rgba(' + r + ',' + g + ',' + b + ',0.015)');
+        grd.addColorStop(1, 'rgba(' + r + ',' + g + ',' + b + ',0)');
+        nctx.beginPath();
+        nctx.ellipse(nb.x, nb.y, nb.rx, nb.ry, 0, 0, Math.PI * 2);
+        nctx.fillStyle = grd; nctx.fill();
+      }
+      frame.nebulaCache = nc;
+    }
+    ctx.drawImage(frame.nebulaCache, bgOffX * 0.5, bgOffY * 0.5);
+
     // --- BACKGROUND PARTICLES ---
     for (let i = 0; i < bg.length; i++) {
       const p = bg[i];
