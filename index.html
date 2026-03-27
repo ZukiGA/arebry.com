@@ -196,9 +196,16 @@
   function findNode(mx, my) {
     let best = -1, bestD = Infinity;
     for (let i = 0; i < nodes.length; i++) {
-      const dx = nodes[i].x - mx, dy = nodes[i].y - my;
-      const d2 = dx*dx + dy*dy;
-      const threshold = nodes[i].url ? 5000 : 2500; // 70px vs 50px
+      const n = nodes[i];
+      const dx = n.x - mx, dy = n.y - my;
+      let d2 = dx*dx + dy*dy;
+      // For project nodes, also check label area (below the node)
+      if (n.url) {
+        const labelDy = n.y + n.r + 10 - my; // center of label area
+        const labelD2 = dx*dx + labelDy*labelDy;
+        d2 = Math.min(d2, labelD2);
+      }
+      const threshold = n.url ? 6400 : 2500; // 80px vs 50px
       if (d2 < threshold && d2 < bestD) { bestD = d2; best = i; }
     }
     return best;
@@ -220,7 +227,7 @@
     if (dragging === null) return;
     const n = nodes[dragging];
     const moved = Math.abs(n.x - dragStartX) + Math.abs(n.y - dragStartY);
-    if (moved < 8 && n.url) {
+    if (moved < 30 && n.url) { // 30px tolerance for finger taps
       window.open(n.url, '_blank');
     }
     for (let j = 0; j < nodes.length; j++) {
