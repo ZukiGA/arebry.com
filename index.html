@@ -232,7 +232,7 @@
         break;
       }
     }
-    n.dragged = false; n.px = n.x; n.py = n.y; n.homeX = n.x; n.homeY = n.y;
+    n.dragged = false; n.px = n.x; n.py = n.y;  // keep original homeX/homeY — drifts back slowly
     dragging = null;
     canvas.style.cursor = 'crosshair';
   }
