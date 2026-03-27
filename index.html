@@ -175,6 +175,17 @@
   // === DRAG STATE ===
   let dragging = null;
   let mouse = { x: W/2, y: H/2, active: false };
+  let gyro = { x: 0, y: 0 }; // normalized -1 to 1
+
+  // Gyroscope for mobile parallax
+  if (window.DeviceOrientationEvent) {
+    addEventListener('deviceorientation', e => {
+      if (e.gamma !== null && e.beta !== null) {
+        gyro.x = Math.max(-1, Math.min(1, e.gamma / 30)); // tilt left/right
+        gyro.y = Math.max(-1, Math.min(1, (e.beta - 45) / 30)); // tilt forward/back, centered at 45°
+      }
+    });
+  }
 
   function findNode(mx, my) {
     let best = -1, bestD = 2500; // 50px radius for easier mobile taps
@@ -206,12 +217,13 @@
     lorenzStep(0.001 * dt * 0.06); // relative to frame time
     const lorenzNorm = Math.sqrt(lx*lx + ly*ly + lz*lz) || 1;
 
-    // Parallax offsets based on mouse position
-    const pmx = (mouse.x - W/2) / W; // -0.5 to 0.5
-    const pmy = (mouse.y - H/2) / H;
-    const bgOffX = pmx * -8;  // background moves opposite, subtle
+    // Parallax offsets (mouse on desktop, gyroscope on mobile)
+    const isMobile = 'ontouchstart' in window;
+    const pmx = isMobile ? gyro.x : (mouse.x - W/2) / W * 2;
+    const pmy = isMobile ? gyro.y : (mouse.y - H/2) / H * 2;
+    const bgOffX = pmx * -8;
     const bgOffY = pmy * -8;
-    const fgOffX = pmx * -20; // constellation moves more
+    const fgOffX = pmx * -20;
     const fgOffY = pmy * -20;
 
     ctx.clearRect(0, 0, W, H);
