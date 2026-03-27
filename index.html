@@ -88,11 +88,26 @@
 
   // === AUDIO ===
   let audioCtx = null;
+  let audioUnlocked = false;
   function getAudio() {
     if (!audioCtx) audioCtx = new (window.AudioContext || window.webkitAudioContext)();
     if (audioCtx.state === 'suspended') audioCtx.resume();
     return audioCtx;
   }
+  // Unlock audio on first touch (Safari iOS requirement)
+  function unlockAudio() {
+    if (audioUnlocked) return;
+    const ctx = getAudio();
+    // Play a silent buffer to permanently unlock
+    const buf = ctx.createBuffer(1, 1, 22050);
+    const src = ctx.createBufferSource();
+    src.buffer = buf;
+    src.connect(ctx.destination);
+    src.start(0);
+    audioUnlocked = true;
+  }
+  document.addEventListener('touchstart', unlockAudio, {once: false});
+  document.addEventListener('click', unlockAudio, {once: false});
   // Pentatonic scale frequencies (C4-C6 range)
   const PENTA = [261.6,293.7,329.6,392.0,440.0,523.3,587.3,659.3,784.0,880.0,1046.5];
 
