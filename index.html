@@ -241,6 +241,90 @@
   addEventListener('touchmove', e => { if (dragging !== null) { e.preventDefault(); const t = e.touches[0]; mouse.x = t.clientX; mouse.y = t.clientY; nodes[dragging].x = t.clientX; nodes[dragging].y = t.clientY; }}, {passive:false});
   addEventListener('touchend', onRelease);
 
+  // === EASTER EGGS ===
+
+  // Big bang function — explodes from center, then re-forms
+  function bigBang() {
+    const centerX = W / 2, centerY = H / 2;
+    for (const n of nodes) {
+      const dx = n.x - centerX, dy = n.y - centerY;
+      const d = Math.sqrt(dx*dx + dy*dy) || 1;
+      const force = 15 + Math.random() * 10;
+      n.px = n.x; n.py = n.y;
+      n.x += (dx / d) * force;
+      n.y += (dy / d) * force;
+      // New random home position
+      n.homeX = W * (0.1 + Math.random() * 0.8);
+      n.homeY = H * (0.1 + Math.random() * 0.8);
+    }
+    // Flash effect
+    bigBangFlash = 1;
+  }
+  let bigBangFlash = 0;
+
+  // Double tap on empty space — create a new star
+  let lastTapTime = 0, lastTapX = 0, lastTapY = 0;
+  function handleDoubleTap(x, y) {
+    const now = Date.now();
+    const dt = now - lastTapTime;
+    const dist = Math.abs(x - lastTapX) + Math.abs(y - lastTapY);
+    if (dt < 350 && dist < 40) {
+      // Check it's empty space (no node nearby)
+      const near = findNode(x, y);
+      if (near < 0 || Math.sqrt((nodes[near].x-x)**2 + (nodes[near].y-y)**2) > 50) {
+        // Create new star!
+        const tints = [[224,220,212],[235,210,180],[180,210,235],[210,190,230]];
+        const tint = tints[Math.floor(Math.random() * tints.length)];
+        const mass = 0.5 + Math.random() * 2;
+        nodes.push({
+          x, y, px: x, py: y, homeX: x, homeY: y,
+          mass, r: 1.5 + mass * 1.8,
+          brightness: 0.3 + Math.random() * 0.7,
+          phase: Math.random() * Math.PI * 2,
+          nOff: Math.random() * 500,
+          tint, dragged: false, label: null, url: null
+        });
+        // Connect to nearest node
+        let bestJ = -1, bestD = Infinity;
+        for (let j = 0; j < nodes.length - 1; j++) {
+          const dx = nodes[j].x - x, dy = nodes[j].y - y;
+          const d = Math.sqrt(dx*dx + dy*dy);
+          if (d < bestD) { bestD = d; bestJ = j; }
+        }
+        if (bestJ >= 0) {
+          edges.push({ a: nodes.length - 1, b: bestJ, restLen: bestD, energy: Math.random() });
+        }
+      }
+      lastTapTime = 0;
+    } else {
+      lastTapTime = now; lastTapX = x; lastTapY = y;
+    }
+  }
+  canvas.addEventListener('dblclick', e => { handleDoubleTap(e.clientX, e.clientY); });
+  canvas.addEventListener('touchstart', e => {
+    if (e.touches.length === 1) handleDoubleTap(e.touches[0].clientX, e.touches[0].clientY);
+  }, {passive: true});
+
+  // Shake detection — triggers big bang
+  let shakeHistory = [];
+  if (window.DeviceMotionEvent) {
+    addEventListener('devicemotion', e => {
+      const acc = e.accelerationIncludingGravity;
+      if (!acc) return;
+      const total = Math.abs(acc.x) + Math.abs(acc.y) + Math.abs(acc.z);
+      shakeHistory.push({ t: Date.now(), v: total });
+      // Keep last 500ms
+      const cutoff = Date.now() - 500;
+      shakeHistory = shakeHistory.filter(s => s.t > cutoff);
+      // If 3+ strong readings in 500ms, it's a shake
+      const strong = shakeHistory.filter(s => s.v > 35);
+      if (strong.length >= 3) {
+        bigBang();
+        shakeHistory = [];
+      }
+    });
+  }
+
   // === MAIN LOOP ===
   let lastT = performance.now();
   const shootingStars = [];
@@ -457,6 +541,14 @@
       }
     }
     ctx.restore(); // end parallax offset
+
+    // Big bang flash
+    if (bigBangFlash > 0) {
+      ctx.fillStyle = 'rgba(255,255,255,' + bigBangFlash * 0.3 + ')';
+      ctx.fillRect(0, 0, W, H);
+      bigBangFlash *= 0.92;
+      if (bigBangFlash < 0.01) bigBangFlash = 0;
+    }
 
     // --- SHOOTING STARS ---
     if (Math.random() < 0.002) { // ~1 every 8 seconds at 60fps
