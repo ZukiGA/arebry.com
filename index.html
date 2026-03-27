@@ -122,8 +122,8 @@
 
     const master = ctx.createGain();
     master.gain.setValueAtTime(0, ctx.currentTime);
-    master.gain.linearRampToValueAtTime(0.9, ctx.currentTime + 0.01);
-    master.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + 2.5);
+    master.gain.linearRampToValueAtTime(0.25, ctx.currentTime + 0.01);
+    master.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + 2.0);
 
     // Delay for spatial feel
     const delay = ctx.createDelay();
@@ -158,7 +158,7 @@
 
     const master = ctx.createGain();
     master.gain.setValueAtTime(0, ctx.currentTime);
-    master.gain.linearRampToValueAtTime(0.7, ctx.currentTime + 0.08);
+    master.gain.linearRampToValueAtTime(0.15, ctx.currentTime + 0.08);
     master.connect(ctx.destination);
 
     // Two oscillators — slight detune for chorus warmth
