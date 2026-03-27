@@ -138,7 +138,7 @@
     const y = H * (0.2 + rng() * 0.5);
     nodes.push({
       x, y, px: x, py: y, homeX: x, homeY: y,
-      mass: 2.5, r: 5, brightness: 0.8,
+      mass: 4, r: 8, brightness: 1,
       phase: rng() * Math.PI * 2, nOff: rng() * 500,
       tint: proj.tint, dragged: false,
       label: proj.label, url: proj.url
@@ -202,11 +202,19 @@
   }
 
   function findNode(mx, my) {
-    let best = -1, bestD = 2500; // 50px radius for easier mobile taps
+    let best = -1, bestD = 2500; // 50px radius
     for (let i = 0; i < nodes.length; i++) {
       const dx = nodes[i].x - mx, dy = nodes[i].y - my;
       const d = dx*dx + dy*dy;
-      if (d < bestD) { bestD = d; best = i; }
+      const threshold = nodes[i].url ? 5000 : 2500; // 70px for project nodes
+      if (d < threshold && d < bestD) { bestD = d; best = i; }
+    }
+    // Prefer project nodes if close enough
+    for (let i = 0; i < nodes.length; i++) {
+      if (!nodes[i].url) continue;
+      const dx = nodes[i].x - mx, dy = nodes[i].y - my;
+      const d = dx*dx + dy*dy;
+      if (d < 5000) return i;
     }
     return best;
   }
@@ -537,10 +545,10 @@
       ctx.fillStyle = 'rgba(' + tr + ',' + tg + ',' + tb + ',' + (p + 0.15) + ')'; ctx.fill();
       // Label for project nodes
       if (n.label) {
-        ctx.font = '300 11px Inter, sans-serif';
-        ctx.fillStyle = 'rgba(' + tr + ',' + tg + ',' + tb + ',' + (p * 0.8) + ')';
+        ctx.font = '400 13px Inter, sans-serif';
+        ctx.fillStyle = 'rgba(' + tr + ',' + tg + ',' + tb + ',' + Math.max(p * 0.9, 0.5) + ')';
         ctx.textAlign = 'center';
-        ctx.fillText(n.label, n.x, n.y + n.r + 16);
+        ctx.fillText(n.label, n.x, n.y + n.r + 18);
       }
     }
     ctx.restore(); // end parallax offset
