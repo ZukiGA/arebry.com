@@ -3,34 +3,30 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="description" content="arebry — a generative constellation">
+<meta property="og:title" content="arebry">
+<meta property="og:description" content="a generative constellation">
+<meta property="og:type" content="website">
+<meta property="og:url" content="https://arebry.com">
+<meta name="theme-color" content="#0a0a0f">
+<link rel="dns-prefetch" href="https://fonts.googleapis.com">
+<link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>✦</text></svg>">
 <title>arebry</title>
 <style>
   @import url('https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@300;400;500&display=swap');
   * { margin: 0; padding: 0; box-sizing: border-box; }
   body { background: #0a0a0f; color: #e8e4df; font-family: 'Space Grotesk', sans-serif; height: 100vh; overflow: hidden; }
-  canvas { position: fixed; top: 0; left: 0; width: 100%; height: 100%; cursor: crosshair; }
-  .links {
-    position: fixed; bottom: 2.5rem; left: 0; right: 0; z-index: 2;
-    display: flex; gap: 1.6rem; flex-wrap: wrap; justify-content: center; align-items: center;
-    pointer-events: none;
-  }
-  .links a {
-    pointer-events: auto; color: #807b74; text-decoration: none; font-weight: 300;
-    font-size: clamp(0.85rem, 2.5vw, 1rem); letter-spacing: 0.04em; padding: 0.3rem 0;
-    border-bottom: 1px solid transparent; transition: color 0.3s, border-color 0.3s;
-  }
-  .links a:hover { color: #c8c2b8; border-bottom-color: #c8c2b830; }
-  .dot { color: #3a3832; font-size: clamp(0.6rem, 1.5vw, 0.75rem); user-select: none; }
+  canvas { position: fixed; top: 0; left: 0; width: 100%; height: 100%; cursor: crosshair; will-change: transform; }
 </style>
 </head>
 <body>
 <canvas id="c"></canvas>
-<!-- links are now constellation nodes -->
 <script>
 (function() {
   const canvas = document.getElementById('c');
   const ctx = canvas.getContext('2d');
   let W, H, dpr;
+  let nebulaCache = null; // invalidated on resize
 
   function resize() {
     dpr = Math.min(devicePixelRatio || 1, 2);
@@ -38,6 +34,7 @@
     canvas.width = W * dpr; canvas.height = H * dpr;
     canvas.style.width = W + 'px'; canvas.style.height = H + 'px';
     ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+    nebulaCache = null; // #3: invalidate nebula on resize
   }
   resize();
   addEventListener('resize', resize);
@@ -65,27 +62,25 @@
     if (t2 > 0) { t2 *= t2; const g = grad[perm[ii+1 + perm[jj+1]] & 7]; n2 = t2 * t2 * (g[0]*x2 + g[1]*y2); }
     return 70 * (n0 + n1 + n2);
   }
-  // Fractal noise
   function fnoise(x, y) { return simplex2(x, y) * 0.6 + simplex2(x*2.1, y*2.1) * 0.3 + simplex2(x*4.3, y*4.3) * 0.1; }
-  // Curl noise (divergence-free flow from noise field)
   function curl(x, y, t) {
     const e = 0.01;
     const dndx = (fnoise(x + e, y + t) - fnoise(x - e, y + t)) / (2 * e);
     const dndy = (fnoise(x, y + e + t) - fnoise(x, y - e + t)) / (2 * e);
-    return { x: dndy, y: -dndx }; // curl of scalar field
+    return { x: dndy, y: -dndx };
   }
 
-  // === LORENZ ATTRACTOR (for subtle chaotic flow) ===
+  // === LORENZ ATTRACTOR ===
   let lx = 0.1, ly = 0, lz = 0;
-  const SIGMA = 10, RHO = 28, BETA = 8/3;
+  const L_SIGMA = 10, RHO = 28, L_BETA = 8/3;
   function lorenzStep(dt) {
-    const dx = SIGMA * (ly - lx) * dt;
+    const dx = L_SIGMA * (ly - lx) * dt;
     const dy = (lx * (RHO - lz) - ly) * dt;
-    const dz = (lx * ly - BETA * lz) * dt;
+    const dz = (lx * ly - L_BETA * lz) * dt;
     lx += dx; ly += dy; lz += dz;
   }
 
-  // === SEEDED RNG (from timestamp — unique every visit) ===
+  // === SEEDED RNG ===
   let seed = Date.now() ^ (Math.random() * 0xFFFFFFFF | 0);
   function rng() { seed = (seed * 16807) % 2147483647; return (seed & 0x7fffffff) / 2147483647; }
 
@@ -97,17 +92,22 @@
       r: Math.random()*1.2+0.3, alpha: Math.random()*0.25+0.05, nOff: Math.random()*500 });
   }
 
+  // #8: Spatial grid for BG connections (avoids O(n²) every frame)
+  function buildBgGrid(cellSize) {
+    const grid = {};
+    for (let i = 0; i < bg.length; i++) {
+      const cx = Math.floor(bg[i].x / cellSize), cy = Math.floor(bg[i].y / cellSize);
+      const key = cx + ',' + cy;
+      (grid[key] = grid[key] || []).push(i);
+    }
+    return grid;
+  }
+
   // === CONSTELLATION NODES ===
-  const cx = () => W/2, cy = () => H/2;
-  // Use full screen dimensions for spread, not just min
-  const spreadX = W * 0.55;
-  const spreadY = H * 0.55;
-  // Scale node count to screen area
   const area = W * H;
-  const nodeCount = Math.max(20, Math.min(40, Math.floor(area / 12000) + Math.floor(rng() * 5)));
+  const nodeCount = Math.max(20, Math.min(40, Math.floor(area / 18000) + Math.floor(rng() * 5))); // #11: tuned divisor
   const nodes = [];
   for (let i = 0; i < nodeCount; i++) {
-    // Random position across screen with margin
     const margin = 0.1;
     const x = W * (margin + rng() * (1 - 2 * margin));
     const y = H * (margin + rng() * (1 - 2 * margin));
@@ -115,16 +115,10 @@
     const tints = [[224,220,212],[224,220,212],[224,220,212],[235,210,180],[180,210,235],[210,190,230]];
     const tint = tints[Math.floor(rng() * tints.length)];
     nodes.push({
-      x, y, px: x, py: y,
-      homeX: x, homeY: y,
-      mass,
-      r: 1.5 + mass * 1.8,
-      brightness: 0.3 + rng() * 0.7,
-      phase: rng() * Math.PI * 2,
-      nOff: rng() * 500,
-      tint,
-      dragged: false,
-      label: null, url: null
+      x, y, px: x, py: y, homeX: x, homeY: y, mass,
+      r: 1.5 + mass * 1.8, brightness: 0.3 + rng() * 0.7,
+      phase: rng() * Math.PI * 2, nOff: rng() * 500,
+      tint, dragged: false, label: null, url: null
     });
   }
 
@@ -147,7 +141,7 @@
 
   // === EDGES ===
   const edges = [];
-  const maxEdgeDist = Math.max(spreadX, spreadY) * 0.6;
+  const maxEdgeDist = Math.max(W, H) * 0.3; // #4: use W/H directly
   for (let i = 0; i < nodes.length; i++) {
     for (let j = i + 1; j < nodes.length; j++) {
       const dx = nodes[i].x - nodes[j].x, dy = nodes[i].y - nodes[j].y;
@@ -157,7 +151,6 @@
       }
     }
   }
-  // Ensure connectivity
   for (let i = 0; i < nodes.length; i++) {
     if (!edges.some(e => e.a === i || e.b === i)) {
       let best = -1, bestD = Infinity;
@@ -171,66 +164,65 @@
     }
   }
 
-  // === PHYSICS CONSTANTS (all tuned for SLOW meditative motion) ===
-  const GRAVITY_G = 0.00004;       // n-body gravitational constant (reduced — was collapsing)
-  const GRAVITY_SOFTENING = 40;    // prevents singularity
-  const LJ_EPSILON = 0.000008;       // Lennard-Jones well depth (gentler)
-  const LJ_SIGMA = Math.min(W, H) * 0.12; // equilibrium distance scales with screen
-  const CURL_STRENGTH = 0.00004;   // curl noise turbulence
-  const CURL_SCALE = 0.003;        // noise sample scale
-  const CURL_TIME_SCALE = 0.000015; // how fast curl field evolves
-  const LORENZ_INFLUENCE = 0.00001; // strange attractor whisper
-  const BOID_ALI_RADIUS = 150;     // alignment radius
-  const BOID_ALI_STR = 0.00001;    // alignment force
-  const VERLET_ITERATIONS = 3;     // constraint relaxation passes
-  const DAMPING = 0.985;           // velocity damping (stronger to slow things down)
-  const CENTER_PULL = 0.000012;     // keep constellation centered (weaker to spread more)
+  // === PHYSICS CONSTANTS ===
+  const LJ_EPSILON = 0.000008;
+  const LJ_SIGMA = Math.min(W, H) * 0.12;
+  const CURL_STRENGTH = 0.00004;
+  const CURL_SCALE = 0.003;
+  const CURL_TIME_SCALE = 0.000015;
+  const LORENZ_INFLUENCE = 0.00001;
+  const BOID_ALI_RADIUS = 150;
+  const BOID_ALI_STR = 0.00001;
+  const VERLET_ITERATIONS = 3;
+  const DAMPING = 0.985;
+  const CENTER_PULL = 0.000012;
 
   // === DRAG STATE ===
   let dragging = null;
-  let mouse = { x: W/2, y: H/2, active: false };
-  let gyro = { x: 0, y: 0 }; // normalized -1 to 1
+  let mouse = { x: W/2, y: H/2 };
+  let gyro = { x: 0, y: 0 };
 
   // Gyroscope for mobile parallax
   if (window.DeviceOrientationEvent) {
     addEventListener('deviceorientation', e => {
       if (e.gamma !== null && e.beta !== null) {
-        gyro.x = Math.max(-1, Math.min(1, e.gamma / 30)); // tilt left/right
-        gyro.y = Math.max(-1, Math.min(1, (e.beta - 45) / 30)); // tilt forward/back, centered at 45°
+        gyro.x = Math.max(-1, Math.min(1, e.gamma / 30));
+        gyro.y = Math.max(-1, Math.min(1, (e.beta - 45) / 30));
       }
     });
   }
 
+  // #2: Fixed findNode — closest wins, project nodes get larger radius but no forced override
   function findNode(mx, my) {
-    let best = -1, bestD = 2500; // 50px radius
+    let best = -1, bestD = Infinity;
     for (let i = 0; i < nodes.length; i++) {
       const dx = nodes[i].x - mx, dy = nodes[i].y - my;
-      const d = dx*dx + dy*dy;
-      const threshold = nodes[i].url ? 5000 : 2500; // 70px for project nodes
-      if (d < threshold && d < bestD) { bestD = d; best = i; }
-    }
-    // Prefer project nodes if close enough
-    for (let i = 0; i < nodes.length; i++) {
-      if (!nodes[i].url) continue;
-      const dx = nodes[i].x - mx, dy = nodes[i].y - my;
-      const d = dx*dx + dy*dy;
-      if (d < 5000) return i;
+      const d2 = dx*dx + dy*dy;
+      const threshold = nodes[i].url ? 5000 : 2500; // 70px vs 50px
+      if (d2 < threshold && d2 < bestD) { bestD = d2; best = i; }
     }
     return best;
   }
 
   let dragStartX = 0, dragStartY = 0;
-  canvas.addEventListener('mousedown', e => { e.preventDefault(); dragStartX = e.clientX; dragStartY = e.clientY; const n = findNode(e.clientX, e.clientY); if (n >= 0) { dragging = n; nodes[n].dragged = true; canvas.style.cursor = 'grabbing'; }});
-  addEventListener('mousemove', e => { mouse.x = e.clientX; mouse.y = e.clientY; mouse.active = true; if (dragging !== null) { nodes[dragging].x = e.clientX; nodes[dragging].y = e.clientY; }});
-  function onRelease(ex, ey) {
+  canvas.addEventListener('mousedown', e => {
+    e.preventDefault();
+    dragStartX = e.clientX; dragStartY = e.clientY;
+    const n = findNode(e.clientX, e.clientY);
+    if (n >= 0) { dragging = n; nodes[n].dragged = true; canvas.style.cursor = 'grabbing'; }
+  });
+  addEventListener('mousemove', e => {
+    mouse.x = e.clientX; mouse.y = e.clientY;
+    if (dragging !== null) { nodes[dragging].x = e.clientX; nodes[dragging].y = e.clientY; }
+  });
+
+  function onRelease() { // #7: removed unused params
     if (dragging === null) return;
     const n = nodes[dragging];
-    // If barely moved, treat as click — open URL if project node
     const moved = Math.abs(n.x - dragStartX) + Math.abs(n.y - dragStartY);
     if (moved < 8 && n.url) {
       window.open(n.url, '_blank');
     }
-    // Check if dropped near another node — create connection
     for (let j = 0; j < nodes.length; j++) {
       if (j === dragging) continue;
       const dx = n.x - nodes[j].x, dy = n.y - nodes[j].y;
@@ -240,18 +232,94 @@
         break;
       }
     }
-    n.dragged = false; n.px = n.x; n.py = n.y;  // keep original homeX/homeY — drifts back slowly
+    n.dragged = false; n.px = n.x; n.py = n.y;
     dragging = null;
     canvas.style.cursor = 'crosshair';
   }
   addEventListener('mouseup', onRelease);
-  canvas.addEventListener('touchstart', e => { e.preventDefault(); const t = e.touches[0]; dragStartX = t.clientX; dragStartY = t.clientY; const n = findNode(t.clientX, t.clientY); if (n >= 0) { dragging = n; nodes[n].dragged = true; }}, {passive:false});
-  addEventListener('touchmove', e => { if (dragging !== null) { e.preventDefault(); const t = e.touches[0]; mouse.x = t.clientX; mouse.y = t.clientY; nodes[dragging].x = t.clientX; nodes[dragging].y = t.clientY; }}, {passive:false});
+
+  // #1: Single touchstart handler — drag takes priority, double tap only on empty space
+  let lastTapTime = 0, lastTapX = 0, lastTapY = 0;
+  canvas.addEventListener('touchstart', e => {
+    const t = e.touches[0];
+    const tx = t.clientX, ty = t.clientY;
+    const n = findNode(tx, ty);
+
+    if (n >= 0) {
+      // Node found — drag it (prevent double-tap from firing)
+      e.preventDefault();
+      dragStartX = tx; dragStartY = ty;
+      dragging = n; nodes[n].dragged = true;
+      lastTapTime = 0; // reset double tap
+    } else {
+      // Empty space — check for double tap
+      const now = Date.now();
+      const dt = now - lastTapTime;
+      const dist = Math.abs(tx - lastTapX) + Math.abs(ty - lastTapY);
+      if (dt < 350 && dist < 40) {
+        // Double tap! Create star
+        const tints = [[224,220,212],[235,210,180],[180,210,235],[210,190,230]];
+        const tint = tints[Math.floor(Math.random() * tints.length)];
+        const mass = 0.5 + Math.random() * 2;
+        nodes.push({
+          x: tx, y: ty, px: tx, py: ty, homeX: tx, homeY: ty,
+          mass, r: 1.5 + mass * 1.8,
+          brightness: 0.3 + Math.random() * 0.7,
+          phase: Math.random() * Math.PI * 2,
+          nOff: Math.random() * 500,
+          tint, dragged: false, label: null, url: null
+        });
+        let bestJ = -1, bestD = Infinity;
+        for (let j = 0; j < nodes.length - 1; j++) {
+          const dx = nodes[j].x - tx, dy = nodes[j].y - ty;
+          const d = Math.sqrt(dx*dx + dy*dy);
+          if (d < bestD) { bestD = d; bestJ = j; }
+        }
+        if (bestJ >= 0) edges.push({ a: nodes.length - 1, b: bestJ, restLen: bestD, energy: Math.random() });
+        lastTapTime = 0;
+      } else {
+        lastTapTime = now; lastTapX = tx; lastTapY = ty;
+      }
+    }
+  }, {passive: false});
+
+  addEventListener('touchmove', e => {
+    if (dragging !== null) {
+      e.preventDefault();
+      const t = e.touches[0];
+      mouse.x = t.clientX; mouse.y = t.clientY;
+      nodes[dragging].x = t.clientX; nodes[dragging].y = t.clientY;
+    }
+  }, {passive: false});
   addEventListener('touchend', onRelease);
 
-  // === EASTER EGGS ===
+  // Desktop double-click creates star
+  canvas.addEventListener('dblclick', e => {
+    const near = findNode(e.clientX, e.clientY);
+    if (near >= 0) return; // don't create on top of existing node
+    const tints = [[224,220,212],[235,210,180],[180,210,235],[210,190,230]];
+    const tint = tints[Math.floor(Math.random() * tints.length)];
+    const mass = 0.5 + Math.random() * 2;
+    const x = e.clientX, y = e.clientY;
+    nodes.push({
+      x, y, px: x, py: y, homeX: x, homeY: y,
+      mass, r: 1.5 + mass * 1.8,
+      brightness: 0.3 + Math.random() * 0.7,
+      phase: Math.random() * Math.PI * 2,
+      nOff: Math.random() * 500,
+      tint, dragged: false, label: null, url: null
+    });
+    let bestJ = -1, bestD = Infinity;
+    for (let j = 0; j < nodes.length - 1; j++) {
+      const dx = nodes[j].x - x, dy = nodes[j].y - y;
+      const d = Math.sqrt(dx*dx + dy*dy);
+      if (d < bestD) { bestD = d; bestJ = j; }
+    }
+    if (bestJ >= 0) edges.push({ a: nodes.length - 1, b: bestJ, restLen: bestD, energy: Math.random() });
+  });
 
-  // Big bang function — explodes from center, then re-forms
+  // === BIG BANG ===
+  let bigBangFlash = 0;
   function bigBang() {
     const centerX = W / 2, centerY = H / 2;
     for (const n of nodes) {
@@ -261,59 +329,13 @@
       n.px = n.x; n.py = n.y;
       n.x += (dx / d) * force;
       n.y += (dy / d) * force;
-      // New random home position
       n.homeX = W * (0.1 + Math.random() * 0.8);
       n.homeY = H * (0.1 + Math.random() * 0.8);
     }
-    // Flash effect
     bigBangFlash = 1;
   }
-  let bigBangFlash = 0;
 
-  // Double tap on empty space — create a new star
-  let lastTapTime = 0, lastTapX = 0, lastTapY = 0;
-  function handleDoubleTap(x, y) {
-    const now = Date.now();
-    const dt = now - lastTapTime;
-    const dist = Math.abs(x - lastTapX) + Math.abs(y - lastTapY);
-    if (dt < 350 && dist < 40) {
-      // Check it's empty space (no node nearby)
-      const near = findNode(x, y);
-      if (near < 0 || Math.sqrt((nodes[near].x-x)**2 + (nodes[near].y-y)**2) > 50) {
-        // Create new star!
-        const tints = [[224,220,212],[235,210,180],[180,210,235],[210,190,230]];
-        const tint = tints[Math.floor(Math.random() * tints.length)];
-        const mass = 0.5 + Math.random() * 2;
-        nodes.push({
-          x, y, px: x, py: y, homeX: x, homeY: y,
-          mass, r: 1.5 + mass * 1.8,
-          brightness: 0.3 + Math.random() * 0.7,
-          phase: Math.random() * Math.PI * 2,
-          nOff: Math.random() * 500,
-          tint, dragged: false, label: null, url: null
-        });
-        // Connect to nearest node
-        let bestJ = -1, bestD = Infinity;
-        for (let j = 0; j < nodes.length - 1; j++) {
-          const dx = nodes[j].x - x, dy = nodes[j].y - y;
-          const d = Math.sqrt(dx*dx + dy*dy);
-          if (d < bestD) { bestD = d; bestJ = j; }
-        }
-        if (bestJ >= 0) {
-          edges.push({ a: nodes.length - 1, b: bestJ, restLen: bestD, energy: Math.random() });
-        }
-      }
-      lastTapTime = 0;
-    } else {
-      lastTapTime = now; lastTapX = x; lastTapY = y;
-    }
-  }
-  canvas.addEventListener('dblclick', e => { handleDoubleTap(e.clientX, e.clientY); });
-  canvas.addEventListener('touchstart', e => {
-    if (e.touches.length === 1) handleDoubleTap(e.touches[0].clientX, e.touches[0].clientY);
-  }, {passive: true});
-
-  // Shake detection — triggers big bang
+  // #10: Shake detection with higher threshold (45 instead of 35)
   let shakeHistory = [];
   if (window.DeviceMotionEvent) {
     addEventListener('devicemotion', e => {
@@ -321,12 +343,9 @@
       if (!acc) return;
       const total = Math.abs(acc.x) + Math.abs(acc.y) + Math.abs(acc.z);
       shakeHistory.push({ t: Date.now(), v: total });
-      // Keep last 500ms
       const cutoff = Date.now() - 500;
       shakeHistory = shakeHistory.filter(s => s.t > cutoff);
-      // If 3+ strong readings in 500ms, it's a shake
-      const strong = shakeHistory.filter(s => s.v > 35);
-      if (strong.length >= 3) {
+      if (shakeHistory.filter(s => s.v > 45).length >= 3) {
         bigBang();
         shakeHistory = [];
       }
@@ -336,18 +355,17 @@
   // === MAIN LOOP ===
   let lastT = performance.now();
   const shootingStars = [];
+  const isMobile = 'ontouchstart' in window; // check once, not every frame
 
   function frame(now) {
     const dt = Math.min(now - lastT, 50);
     lastT = now;
-    const tSlow = now * CURL_TIME_SCALE; // very slow time for curl field
+    const tSlow = now * CURL_TIME_SCALE;
 
-    // Step Lorenz attractor
-    lorenzStep(0.001 * dt * 0.06); // relative to frame time
+    lorenzStep(0.001 * dt * 0.06);
     const lorenzNorm = Math.sqrt(lx*lx + ly*ly + lz*lz) || 1;
 
-    // Parallax offsets (mouse on desktop, gyroscope on mobile)
-    const isMobile = 'ontouchstart' in window;
+    // Parallax
     const pmx = isMobile ? gyro.x : (mouse.x - W/2) / W * 2;
     const pmy = isMobile ? gyro.y : (mouse.y - H/2) / H * 2;
     const bgOffX = pmx * -8;
@@ -357,9 +375,8 @@
 
     ctx.clearRect(0, 0, W, H);
 
-    // --- NEBULA (subtle colored clouds) ---
-    if (!frame.nebulaCache) {
-      // Pre-render nebula to offscreen canvas (static, only once)
+    // --- NEBULA --- (#3: invalidated on resize via nebulaCache = null)
+    if (!nebulaCache) {
       const nc = document.createElement('canvas');
       nc.width = W; nc.height = H;
       const nctx = nc.getContext('2d');
@@ -378,14 +395,13 @@
         nctx.ellipse(nb.x, nb.y, nb.rx, nb.ry, 0, 0, Math.PI * 2);
         nctx.fillStyle = grd; nctx.fill();
       }
-      frame.nebulaCache = nc;
+      nebulaCache = nc;
     }
-    ctx.drawImage(frame.nebulaCache, bgOffX * 0.5, bgOffY * 0.5);
+    ctx.drawImage(nebulaCache, bgOffX * 0.5, bgOffY * 0.5);
 
     // --- BACKGROUND PARTICLES ---
     for (let i = 0; i < bg.length; i++) {
       const p = bg[i];
-      // Curl noise + Lorenz whisper
       const c = curl(p.x * CURL_SCALE, p.y * CURL_SCALE, tSlow);
       p.vx += c.x * 0.0008 + (lx / lorenzNorm) * 0.00001;
       p.vy += c.y * 0.0008 + (ly / lorenzNorm) * 0.00001;
@@ -398,36 +414,51 @@
       ctx.beginPath(); ctx.arc(p.x + bgOffX, p.y + bgOffY, p.r, 0, Math.PI*2);
       ctx.fillStyle = 'rgba(200,194,184,' + flicker + ')'; ctx.fill();
     }
-    // BG connections
-    for (let i = 0; i < bg.length; i++) {
-      for (let j = i + 1; j < bg.length; j++) {
-        const dx = bg[i].x - bg[j].x, dy = bg[i].y - bg[j].y;
-        const d2 = dx*dx + dy*dy;
-        if (d2 < 6400) {
-          ctx.beginPath(); ctx.moveTo(bg[i].x + bgOffX, bg[i].y + bgOffY); ctx.lineTo(bg[j].x + bgOffX, bg[j].y + bgOffY);
-          ctx.strokeStyle = 'rgba(200,194,184,' + (0.04 * (1 - d2/6400)) + ')';
-          ctx.lineWidth = 0.4; ctx.stroke();
+
+    // #8: BG connections with spatial grid
+    const bgGrid = buildBgGrid(80);
+    for (const key in bgGrid) {
+      const cell = bgGrid[key];
+      const [cx, cy] = key.split(',').map(Number);
+      // Check this cell + neighbors
+      for (let ox = -1; ox <= 1; ox++) {
+        for (let oy = -1; oy <= 1; oy++) {
+          const nk = (cx+ox) + ',' + (cy+oy);
+          const neighbor = bgGrid[nk];
+          if (!neighbor) continue;
+          for (const i of cell) {
+            for (const j of neighbor) {
+              if (j <= i) continue;
+              const dx = bg[i].x - bg[j].x, dy = bg[i].y - bg[j].y;
+              const d2 = dx*dx + dy*dy;
+              if (d2 < 6400) {
+                ctx.beginPath();
+                ctx.moveTo(bg[i].x + bgOffX, bg[i].y + bgOffY);
+                ctx.lineTo(bg[j].x + bgOffX, bg[j].y + bgOffY);
+                ctx.strokeStyle = 'rgba(200,194,184,' + (0.04 * (1 - d2/6400)) + ')';
+                ctx.lineWidth = 0.4; ctx.stroke();
+              }
+            }
+          }
         }
       }
     }
 
-    // --- CONSTELLATION PHYSICS (Verlet + forces) ---
+    // --- CONSTELLATION PHYSICS ---
     for (let i = 0; i < nodes.length; i++) {
       const n = nodes[i];
       if (n.dragged) continue;
 
-      // Current velocity (Verlet: v ≈ x - px)
       let vx = (n.x - n.px) * DAMPING;
       let vy = (n.y - n.py) * DAMPING;
 
-      // 1. LENNARD-JONES (WCA — repulsive only, truncated at equilibrium)
-      // Prevents clumping without causing collapse
+      // WCA repulsive potential
       for (let j = 0; j < nodes.length; j++) {
         if (j === i) continue;
         const m = nodes[j];
         const dx = m.x - n.x, dy = m.y - n.y;
         const d = Math.sqrt(dx*dx + dy*dy) || 1;
-        if (d < LJ_SIGMA) { // only repel when closer than sigma
+        if (d < LJ_SIGMA) {
           const clamped = Math.max(d, LJ_SIGMA * 0.3);
           const ratio = LJ_SIGMA / clamped;
           const r6 = ratio * ratio * ratio * ratio * ratio * ratio;
@@ -438,23 +469,22 @@
         }
       }
 
-      // 2. CURL NOISE FLOW
+      // Curl noise flow
       const c = curl(n.x * CURL_SCALE, n.y * CURL_SCALE, tSlow);
       vx += c.x * CURL_STRENGTH * dt;
       vy += c.y * CURL_STRENGTH * dt;
 
-      // 3. LORENZ ATTRACTOR WHISPER
+      // Lorenz whisper
       vx += (lx / lorenzNorm) * LORENZ_INFLUENCE * dt;
       vy += (ly / lorenzNorm) * LORENZ_INFLUENCE * dt;
 
-      // 4. BOIDS (alignment only — LJ handles separation + cohesion)
+      // Boid alignment
       let aliVx = 0, aliVy = 0, aliCount = 0;
       for (let j = 0; j < nodes.length; j++) {
         if (j === i) continue;
         const m = nodes[j];
         const dx = n.x - m.x, dy = n.y - m.y;
         const d = Math.sqrt(dx*dx + dy*dy) || 1;
-        // Alignment
         if (d < BOID_ALI_RADIUS) {
           aliVx += m.x - m.px; aliVy += m.y - m.py;
           aliCount++;
@@ -465,20 +495,18 @@
         vy += (aliVy / aliCount - vy) * BOID_ALI_STR * dt;
       }
 
-      // 5. Home pull (each node drifts back to birth position — very gentle, capped)
+      // Home pull (capped)
       const hpx = n.homeX - n.x, hpy = n.homeY - n.y;
       const hpDist = Math.sqrt(hpx*hpx + hpy*hpy) || 1;
-      const hpForce = Math.min(hpDist * CENTER_PULL, 0.003); // cap so far drags don't snap
+      const hpForce = Math.min(hpDist * CENTER_PULL, 0.003);
       vx += (hpx / hpDist) * hpForce * dt;
       vy += (hpy / hpDist) * hpForce * dt;
 
       // Verlet integration
-      n.px = n.x;
-      n.py = n.y;
-      n.x += vx;
-      n.y += vy;
+      n.px = n.x; n.py = n.y;
+      n.x += vx; n.y += vy;
 
-      // Clamp to screen with soft bounce
+      // Screen clamp
       const margin = 20;
       if (n.x < margin) { n.x = margin; n.px = n.x + vx * 0.3; }
       if (n.x > W - margin) { n.x = W - margin; n.px = n.x + vx * 0.3; }
@@ -486,14 +514,14 @@
       if (n.y > H - margin) { n.y = H - margin; n.py = n.y + vy * 0.3; }
     }
 
-    // 6. VERLET EDGE CONSTRAINTS (relaxation)
+    // Verlet edge constraints
     for (let iter = 0; iter < VERLET_ITERATIONS; iter++) {
       for (const e of edges) {
         const a = nodes[e.a], b = nodes[e.b];
         if (a.dragged || b.dragged) continue;
         const dx = b.x - a.x, dy = b.y - a.y;
         const d = Math.sqrt(dx*dx + dy*dy) || 0.01;
-        const diff = (d - e.restLen) / d * 0.15; // soft relaxation
+        const diff = (d - e.restLen) / d * 0.15;
         const ox = dx * diff, oy = dy * diff;
         const totalMass = a.mass + b.mass;
         const ra = b.mass / totalMass, rb = a.mass / totalMass;
@@ -502,21 +530,21 @@
       }
     }
 
-    // --- DRAW EDGES (with parallax) ---
+    // --- DRAW (with parallax) ---
     ctx.save();
     ctx.translate(fgOffX, fgOffY);
+
+    // Edges
     for (const e of edges) {
       const a = nodes[e.a], b = nodes[e.b];
       const dx = b.x - a.x, dy = b.y - a.y;
       const d = Math.sqrt(dx*dx + dy*dy) || 1;
       const stretch = Math.abs(d - e.restLen) / e.restLen;
       const alpha = 0.08 + stretch * 0.15;
-
       ctx.beginPath(); ctx.moveTo(a.x, a.y); ctx.lineTo(b.x, b.y);
       ctx.strokeStyle = 'rgba(200,194,184,' + Math.min(alpha, 0.2) + ')';
       ctx.lineWidth = 0.6; ctx.stroke();
 
-      // Energy particle along edge
       e.energy = (e.energy + 0.0003 * dt) % 1;
       const ex = a.x + dx * e.energy, ey = a.y + dy * e.energy;
       const ealpha = 0.3 + 0.2 * Math.sin(e.energy * Math.PI);
@@ -524,26 +552,25 @@
       ctx.fillStyle = 'rgba(220,216,208,' + ealpha + ')'; ctx.fill();
     }
 
-    // --- DRAW NODES ---
+    // Nodes
     for (const n of nodes) {
       const pulse = n.brightness * (0.6 + 0.3 * Math.sin(now * 0.0001 + n.phase));
       const [tr, tg, tb] = n.tint;
-      // Hover glow — brighter when mouse/touch is near
       const hdx = mouse.x - n.x, hdy = mouse.y - n.y;
       const hDist = Math.sqrt(hdx*hdx + hdy*hdy);
       const hover = hDist < 100 ? (1 - hDist / 100) * 0.6 : 0;
       const p = Math.min(pulse + hover, 1);
       const glowR = n.r * (5 + hover * 8);
-      // Glow
+
       const grd = ctx.createRadialGradient(n.x, n.y, 0, n.x, n.y, glowR);
       grd.addColorStop(0, 'rgba(' + tr + ',' + tg + ',' + tb + ',' + p * 0.5 + ')');
       grd.addColorStop(1, 'rgba(' + tr + ',' + tg + ',' + tb + ',0)');
       ctx.beginPath(); ctx.arc(n.x, n.y, glowR, 0, Math.PI*2);
       ctx.fillStyle = grd; ctx.fill();
-      // Core
+
       ctx.beginPath(); ctx.arc(n.x, n.y, n.r, 0, Math.PI*2);
       ctx.fillStyle = 'rgba(' + tr + ',' + tg + ',' + tb + ',' + (p + 0.15) + ')'; ctx.fill();
-      // Label for project nodes
+
       if (n.label) {
         ctx.font = '400 13px Space Grotesk, sans-serif';
         ctx.fillStyle = 'rgba(' + tr + ',' + tg + ',' + tb + ',' + Math.max(p * 0.9, 0.5) + ')';
@@ -551,37 +578,22 @@
         ctx.fillText(n.label, n.x, n.y + n.r + 18);
       }
     }
-    ctx.restore(); // end parallax offset
 
-    // Big bang flash
-    if (bigBangFlash > 0) {
-      ctx.fillStyle = 'rgba(255,255,255,' + bigBangFlash * 0.3 + ')';
-      ctx.fillRect(0, 0, W, H);
-      bigBangFlash *= 0.92;
-      if (bigBangFlash < 0.01) bigBangFlash = 0;
-    }
-
-    // --- SHOOTING STARS ---
-    if (Math.random() < 0.002) { // ~1 every 8 seconds at 60fps
+    // #6: Shooting stars inside parallax transform
+    if (Math.random() < 0.002) {
       const speed = 3 + Math.random() * 4;
-      const angle = Math.random() * Math.PI * 2;
-      // Start from a random edge of the screen
       const edge = Math.floor(Math.random() * 4);
       let sx, sy;
-      if (edge === 0) { sx = -10; sy = Math.random() * H; } // left
-      else if (edge === 1) { sx = W + 10; sy = Math.random() * H; } // right
-      else if (edge === 2) { sx = Math.random() * W; sy = -10; } // top
-      else { sx = Math.random() * W; sy = H + 10; } // bottom
-      // Aim toward a random point on screen
+      if (edge === 0) { sx = -10; sy = Math.random() * H; }
+      else if (edge === 1) { sx = W + 10; sy = Math.random() * H; }
+      else if (edge === 2) { sx = Math.random() * W; sy = -10; }
+      else { sx = Math.random() * W; sy = H + 10; }
       const tx = W * 0.2 + Math.random() * W * 0.6;
       const ty = H * 0.2 + Math.random() * H * 0.6;
       const a = Math.atan2(ty - sy, tx - sx);
       shootingStars.push({
-        x: sx, y: sy,
-        vx: Math.cos(a) * speed,
-        vy: Math.sin(a) * speed,
-        life: 1, decay: 0.008 + Math.random() * 0.012,
-        len: 20 + Math.random() * 40
+        x: sx, y: sy, vx: Math.cos(a) * speed, vy: Math.sin(a) * speed,
+        life: 1, decay: 0.008 + Math.random() * 0.012, len: 20 + Math.random() * 40
       });
     }
     for (let i = shootingStars.length - 1; i >= 0; i--) {
@@ -591,11 +603,21 @@
       if (s.life <= 0) { shootingStars.splice(i, 1); continue; }
       const tailX = s.x - s.vx * s.len * 0.15;
       const tailY = s.y - s.vy * s.len * 0.15;
-      const grad = ctx.createLinearGradient(s.x, s.y, tailX, tailY);
-      grad.addColorStop(0, 'rgba(230,226,218,' + s.life * 0.7 + ')');
-      grad.addColorStop(1, 'rgba(230,226,218,0)');
+      const sgrad = ctx.createLinearGradient(s.x, s.y, tailX, tailY);
+      sgrad.addColorStop(0, 'rgba(230,226,218,' + s.life * 0.7 + ')');
+      sgrad.addColorStop(1, 'rgba(230,226,218,0)');
       ctx.beginPath(); ctx.moveTo(s.x, s.y); ctx.lineTo(tailX, tailY);
-      ctx.strokeStyle = grad; ctx.lineWidth = 1.2; ctx.stroke();
+      ctx.strokeStyle = sgrad; ctx.lineWidth = 1.2; ctx.stroke();
+    }
+
+    ctx.restore();
+
+    // Big bang flash (outside parallax)
+    if (bigBangFlash > 0) {
+      ctx.fillStyle = 'rgba(255,255,255,' + bigBangFlash * 0.3 + ')';
+      ctx.fillRect(0, 0, W, H);
+      bigBangFlash *= 0.92;
+      if (bigBangFlash < 0.01) bigBangFlash = 0;
     }
 
     requestAnimationFrame(frame);
