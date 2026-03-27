@@ -457,9 +457,12 @@
         vy += (aliVy / aliCount - vy) * BOID_ALI_STR * dt;
       }
 
-      // 5. Home pull (each node returns to its own birth position, not a single center)
-      vx += (n.homeX - n.x) * CENTER_PULL * dt;
-      vy += (n.homeY - n.y) * CENTER_PULL * dt;
+      // 5. Home pull (each node drifts back to birth position — very gentle, capped)
+      const hpx = n.homeX - n.x, hpy = n.homeY - n.y;
+      const hpDist = Math.sqrt(hpx*hpx + hpy*hpy) || 1;
+      const hpForce = Math.min(hpDist * CENTER_PULL, 0.003); // cap so far drags don't snap
+      vx += (hpx / hpDist) * hpForce * dt;
+      vy += (hpy / hpDist) * hpForce * dt;
 
       // Verlet integration
       n.px = n.x;
