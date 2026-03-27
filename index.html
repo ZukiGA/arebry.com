@@ -206,6 +206,14 @@
     lorenzStep(0.001 * dt * 0.06); // relative to frame time
     const lorenzNorm = Math.sqrt(lx*lx + ly*ly + lz*lz) || 1;
 
+    // Parallax offsets based on mouse position
+    const pmx = (mouse.x - W/2) / W; // -0.5 to 0.5
+    const pmy = (mouse.y - H/2) / H;
+    const bgOffX = pmx * -8;  // background moves opposite, subtle
+    const bgOffY = pmy * -8;
+    const fgOffX = pmx * -20; // constellation moves more
+    const fgOffY = pmy * -20;
+
     ctx.clearRect(0, 0, W, H);
 
     // --- BACKGROUND PARTICLES ---
@@ -221,7 +229,7 @@
       if (p.y < -10) p.y = H + 10; if (p.y > H + 10) p.y = -10;
 
       const flicker = p.alpha * (0.7 + 0.3 * simplex2(now * 0.0001 + p.nOff, p.nOff));
-      ctx.beginPath(); ctx.arc(p.x, p.y, p.r, 0, Math.PI*2);
+      ctx.beginPath(); ctx.arc(p.x + bgOffX, p.y + bgOffY, p.r, 0, Math.PI*2);
       ctx.fillStyle = 'rgba(200,194,184,' + flicker + ')'; ctx.fill();
     }
     // BG connections
@@ -230,7 +238,7 @@
         const dx = bg[i].x - bg[j].x, dy = bg[i].y - bg[j].y;
         const d2 = dx*dx + dy*dy;
         if (d2 < 6400) {
-          ctx.beginPath(); ctx.moveTo(bg[i].x, bg[i].y); ctx.lineTo(bg[j].x, bg[j].y);
+          ctx.beginPath(); ctx.moveTo(bg[i].x + bgOffX, bg[i].y + bgOffY); ctx.lineTo(bg[j].x + bgOffX, bg[j].y + bgOffY);
           ctx.strokeStyle = 'rgba(200,194,184,' + (0.04 * (1 - d2/6400)) + ')';
           ctx.lineWidth = 0.4; ctx.stroke();
         }
@@ -325,7 +333,9 @@
       }
     }
 
-    // --- DRAW EDGES ---
+    // --- DRAW EDGES (with parallax) ---
+    ctx.save();
+    ctx.translate(fgOffX, fgOffY);
     for (const e of edges) {
       const a = nodes[e.a], b = nodes[e.b];
       const dx = b.x - a.x, dy = b.y - a.y;
@@ -359,6 +369,7 @@
       ctx.beginPath(); ctx.arc(n.x, n.y, n.r, 0, Math.PI*2);
       ctx.fillStyle = 'rgba(' + tr + ',' + tg + ',' + tb + ',' + (pulse + 0.15) + ')'; ctx.fill();
     }
+    ctx.restore(); // end parallax offset
 
     // --- SHOOTING STARS ---
     if (Math.random() < 0.002) { // ~1 every 8 seconds at 60fps
