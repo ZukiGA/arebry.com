@@ -242,8 +242,8 @@
       for (const nb of nebulae) {
         const grd = nctx.createRadialGradient(nb.x, nb.y, 0, nb.x, nb.y, Math.max(nb.rx, nb.ry));
         const [r, g, b] = nb.color;
-        grd.addColorStop(0, 'rgba(' + r + ',' + g + ',' + b + ',0.035)');
-        grd.addColorStop(0.5, 'rgba(' + r + ',' + g + ',' + b + ',0.015)');
+        grd.addColorStop(0, 'rgba(' + r + ',' + g + ',' + b + ',0.08)');
+        grd.addColorStop(0.5, 'rgba(' + r + ',' + g + ',' + b + ',0.04)');
         grd.addColorStop(1, 'rgba(' + r + ',' + g + ',' + b + ',0)');
         nctx.beginPath();
         nctx.ellipse(nb.x, nb.y, nb.rx, nb.ry, 0, 0, Math.PI * 2);
