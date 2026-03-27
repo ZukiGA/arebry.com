@@ -95,15 +95,19 @@
     return audioCtx;
   }
   // Unlock audio on first touch (Safari iOS requirement)
+  // Also force iOS into "playback" mode so it ignores the silent switch
   function unlockAudio() {
     if (audioUnlocked) return;
     const ctx = getAudio();
-    // Play a silent buffer to permanently unlock
+    // Silent buffer to unlock AudioContext
     const buf = ctx.createBuffer(1, 1, 22050);
     const src = ctx.createBufferSource();
     src.buffer = buf;
     src.connect(ctx.destination);
     src.start(0);
+    // Force iOS media playback mode (ignores silent switch)
+    const audio = new Audio('data:audio/mp3;base64,SUQzBAAAAAAAI1RTU0UAAAAPAAADTGF2ZjU4Ljc2LjEwMAAAAAAAAAAAAAAA//tQAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAWGluZwAAAA8AAAACAAABhgC7u7u7u7u7u7u7u7u7u7u7u7u7u7u7u7u7u7u7u7u7u7u7u7u7u7u7u7u7u7u7u7u7u7u7//////////////////////////////////////////////////////////////////8AAAAATGF2YzU4LjEzAAAAAAAAAAAAAAAAJAAAAAAAAAAAAYYoRBqpAAAAAAD/+1DEAAAHAAGf9AAAIiKkM/88YRAAABNA0gAAAAQMDP/BhxBg+D4fggCAIHf8EAQBAEAQBAEHfB8Hw+CAJ/ygIAgCAIAgCAJ//5cEAQBAEDvg+D4f/6gIAgCB3/5QEAf/BAPg+D4Ph/8oCAIAgd/+XB8Hw//1AQBAEAQO//Lg+D4f/6gIAgCAIHf/lwfB8P/9QEAQBAEDv/y4Pg+H/+oCAIAgCB3/5cHwfD//UBAEAQBA7/8uD4Ph//qAgCAIA');
+    audio.play().catch(function(){});
     audioUnlocked = true;
   }
   document.addEventListener('touchstart', unlockAudio, {once: false});
