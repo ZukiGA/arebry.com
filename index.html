@@ -199,10 +199,27 @@
 
   canvas.addEventListener('mousedown', e => { e.preventDefault(); const n = findNode(e.clientX, e.clientY); if (n >= 0) { dragging = n; nodes[n].dragged = true; canvas.style.cursor = 'grabbing'; }});
   addEventListener('mousemove', e => { mouse.x = e.clientX; mouse.y = e.clientY; mouse.active = true; if (dragging !== null) { nodes[dragging].x = e.clientX; nodes[dragging].y = e.clientY; }});
-  addEventListener('mouseup', () => { if (dragging !== null) { const n = nodes[dragging]; n.dragged = false; n.px = n.x; n.py = n.y; n.homeX = n.x; n.homeY = n.y; dragging = null; } canvas.style.cursor = 'crosshair'; });
+  function onRelease() {
+    if (dragging === null) return;
+    const n = nodes[dragging];
+    // Check if dropped near another node — create connection
+    for (let j = 0; j < nodes.length; j++) {
+      if (j === dragging) continue;
+      const dx = n.x - nodes[j].x, dy = n.y - nodes[j].y;
+      const d = Math.sqrt(dx*dx + dy*dy);
+      if (d < 50 && !edges.some(e => (e.a === dragging && e.b === j) || (e.a === j && e.b === dragging))) {
+        edges.push({ a: dragging, b: j, restLen: d || 40, energy: Math.random() });
+        break;
+      }
+    }
+    n.dragged = false; n.px = n.x; n.py = n.y; n.homeX = n.x; n.homeY = n.y;
+    dragging = null;
+    canvas.style.cursor = 'crosshair';
+  }
+  addEventListener('mouseup', onRelease);
   canvas.addEventListener('touchstart', e => { e.preventDefault(); const t = e.touches[0]; const n = findNode(t.clientX, t.clientY); if (n >= 0) { dragging = n; nodes[n].dragged = true; }}, {passive:false});
   addEventListener('touchmove', e => { if (dragging !== null) { e.preventDefault(); const t = e.touches[0]; mouse.x = t.clientX; mouse.y = t.clientY; nodes[dragging].x = t.clientX; nodes[dragging].y = t.clientY; }}, {passive:false});
-  addEventListener('touchend', () => { if (dragging !== null) { const n = nodes[dragging]; n.dragged = false; n.px = n.x; n.py = n.y; n.homeX = n.x; n.homeY = n.y; dragging = null; }});
+  addEventListener('touchend', onRelease);
 
   // === MAIN LOOP ===
   let lastT = performance.now();
