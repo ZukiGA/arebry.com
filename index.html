@@ -108,8 +108,8 @@
     osc.frequency.value = freq;
     // Soft attack, gentle decay
     gain.gain.setValueAtTime(0, ctx.currentTime);
-    gain.gain.linearRampToValueAtTime(0.6, ctx.currentTime + 0.02);
-    gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + 1.8);
+    gain.gain.linearRampToValueAtTime(1.0, ctx.currentTime + 0.01);
+    gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + 2.0);
     osc.connect(gain); gain.connect(ctx.destination);
     osc.start(); osc.stop(ctx.currentTime + 1.3);
   }
@@ -125,7 +125,7 @@
     osc.type = 'triangle'; // warmer than sine
     osc.frequency.value = clamped;
     gain.gain.setValueAtTime(0, ctx.currentTime);
-    gain.gain.linearRampToValueAtTime(0.4, ctx.currentTime + 0.1);
+    gain.gain.linearRampToValueAtTime(0.8, ctx.currentTime + 0.05);
     // Store ref so we can fade out on release
     node._audioOsc = osc;
     node._audioGain = gain;
