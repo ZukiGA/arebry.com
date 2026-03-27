@@ -86,7 +86,31 @@
   let seed = Date.now() ^ (Math.random() * 0xFFFFFFFF | 0);
   function rng() { seed = (seed * 16807) % 2147483647; return (seed & 0x7fffffff) / 2147483647; }
 
-  // === BACKGROUND PARTICLES ===
+  // === CONSTELLATION NAME ===
+  const adjectives = [
+    'silent','dusk','fading','hollow','distant','pale','slow','deep','thin','still',
+    'soft','low','far','dim','cold','warm','brief','late','lost','last',
+    'quiet','broken','sunken','buried','floating','frozen','gentle','hidden','lunar','minor',
+    'narrow','open','outer','risen','sacred','second','settled','shaded','silver','small',
+    'spare','steady','subtle','tender','tired','unlit','vast','waning','weary','wild'
+  ];
+  const nouns = [
+    'meridian','orbit','tide','signal','harbor','current','archive','compass','passage','drift',
+    'ember','shore','threshold','vapor','circuit','moth','canopy','fracture','remnant','aurora',
+    'cartograph','estuary','filament','glacier','inlet','junction','lantern','margin','nebula','outpost',
+    'parallax','quarry','ridgeline','silhouette','terminus','undertow','vessel','waypoint','zenith','alcove',
+    'boulevard','clearing','depot','envelope','frontier','gallery','horizon','index','keystone','lattice'
+  ];
+  const nameAdj = adjectives[Math.abs(seed) % adjectives.length];
+  const nameNoun = nouns[Math.abs(seed * 7 + 13) % nouns.length];
+  const constellationName = nameAdj + ' ' + nameNoun;
+  document.title = constellationName;
+
+  // Subtle corner label
+  const nameEl = document.createElement('div');
+  nameEl.textContent = constellationName;
+  nameEl.style.cssText = 'position:fixed;bottom:12px;right:14px;z-index:2;font:300 11px Space Grotesk,sans-serif;color:rgba(200,194,184,0.2);letter-spacing:0.06em;pointer-events:none;';
+  document.body.appendChild(nameEl);
   const bgCount = Math.min(Math.floor(W * H / 7000), 180);
   const bg = [];
   for (let i = 0; i < bgCount; i++) {
