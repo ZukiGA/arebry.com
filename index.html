@@ -242,8 +242,8 @@
       for (const nb of nebulae) {
         const grd = nctx.createRadialGradient(nb.x, nb.y, 0, nb.x, nb.y, Math.max(nb.rx, nb.ry));
         const [r, g, b] = nb.color;
-        grd.addColorStop(0, 'rgba(' + r + ',' + g + ',' + b + ',0.08)');
-        grd.addColorStop(0.5, 'rgba(' + r + ',' + g + ',' + b + ',0.04)');
+        grd.addColorStop(0, 'rgba(' + r + ',' + g + ',' + b + ',0.18)');
+        grd.addColorStop(0.5, 'rgba(' + r + ',' + g + ',' + b + ',0.08)');
         grd.addColorStop(1, 'rgba(' + r + ',' + g + ',' + b + ',0)');
         nctx.beginPath();
         nctx.ellipse(nb.x, nb.y, nb.rx, nb.ry, 0, 0, Math.PI * 2);
@@ -396,15 +396,21 @@
     for (const n of nodes) {
       const pulse = n.brightness * (0.6 + 0.3 * Math.sin(now * 0.0001 + n.phase));
       const [tr, tg, tb] = n.tint;
+      // Hover glow — brighter when mouse/touch is near
+      const hdx = mouse.x - n.x, hdy = mouse.y - n.y;
+      const hDist = Math.sqrt(hdx*hdx + hdy*hdy);
+      const hover = hDist < 100 ? (1 - hDist / 100) * 0.6 : 0;
+      const p = Math.min(pulse + hover, 1);
+      const glowR = n.r * (5 + hover * 8);
       // Glow
-      const grd = ctx.createRadialGradient(n.x, n.y, 0, n.x, n.y, n.r * 5);
-      grd.addColorStop(0, 'rgba(' + tr + ',' + tg + ',' + tb + ',' + pulse * 0.5 + ')');
+      const grd = ctx.createRadialGradient(n.x, n.y, 0, n.x, n.y, glowR);
+      grd.addColorStop(0, 'rgba(' + tr + ',' + tg + ',' + tb + ',' + p * 0.5 + ')');
       grd.addColorStop(1, 'rgba(' + tr + ',' + tg + ',' + tb + ',0)');
-      ctx.beginPath(); ctx.arc(n.x, n.y, n.r * 5, 0, Math.PI*2);
+      ctx.beginPath(); ctx.arc(n.x, n.y, glowR, 0, Math.PI*2);
       ctx.fillStyle = grd; ctx.fill();
       // Core
       ctx.beginPath(); ctx.arc(n.x, n.y, n.r, 0, Math.PI*2);
-      ctx.fillStyle = 'rgba(' + tr + ',' + tg + ',' + tb + ',' + (pulse + 0.15) + ')'; ctx.fill();
+      ctx.fillStyle = 'rgba(' + tr + ',' + tg + ',' + tb + ',' + (p + 0.15) + ')'; ctx.fill();
     }
     ctx.restore(); // end parallax offset
 
