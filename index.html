@@ -98,39 +98,63 @@
 
   function playChime(y) {
     const ctx = getAudio();
-    // Map y position to pitch (top=high, bottom=low)
     const idx = Math.floor((1 - y / H) * (PENTA.length - 1));
     const freq = PENTA[Math.max(0, Math.min(idx, PENTA.length - 1))];
 
-    const osc = ctx.createOscillator();
-    const gain = ctx.createGain();
-    osc.type = 'sine';
-    osc.frequency.value = freq;
-    // Soft attack, gentle decay
-    gain.gain.setValueAtTime(0, ctx.currentTime);
-    gain.gain.linearRampToValueAtTime(1.0, ctx.currentTime + 0.01);
-    gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + 2.0);
-    osc.connect(gain); gain.connect(ctx.destination);
-    osc.start(); osc.stop(ctx.currentTime + 1.3);
+    const master = ctx.createGain();
+    master.gain.setValueAtTime(0, ctx.currentTime);
+    master.gain.linearRampToValueAtTime(0.9, ctx.currentTime + 0.01);
+    master.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + 2.5);
+
+    // Delay for spatial feel
+    const delay = ctx.createDelay();
+    delay.delayTime.value = 0.15;
+    const delayGain = ctx.createGain();
+    delayGain.gain.value = 0.3;
+    master.connect(ctx.destination);
+    master.connect(delay);
+    delay.connect(delayGain);
+    delayGain.connect(ctx.destination);
+
+    // 3 layered oscillators for richness
+    const types = ['sine', 'triangle', 'sine'];
+    const detunes = [0, 7, -5];
+    const gains = [0.6, 0.3, 0.15];
+    for (let i = 0; i < 3; i++) {
+      const osc = ctx.createOscillator();
+      const g = ctx.createGain();
+      osc.type = types[i];
+      osc.frequency.value = i === 2 ? freq * 2 : freq;
+      osc.detune.value = detunes[i];
+      g.gain.value = gains[i];
+      osc.connect(g); g.connect(master);
+      osc.start(); osc.stop(ctx.currentTime + 2.6);
+    }
   }
 
   function playDragTone(node) {
     const ctx = getAudio();
-    // Pitch from mass (heavier = lower)
-    const freq = PENTA[Math.floor((1 - node.mass / 2.5) * (PENTA.length - 1))];
-    const clamped = PENTA[Math.max(0, Math.min(Math.floor(freq), PENTA.length - 1))] || freq;
+    const massIdx = Math.floor((1 - node.mass / 6) * (PENTA.length - 1));
+    const freq = PENTA[Math.max(0, Math.min(massIdx, PENTA.length - 1))];
 
-    const osc = ctx.createOscillator();
-    const gain = ctx.createGain();
-    osc.type = 'triangle'; // warmer than sine
-    osc.frequency.value = clamped;
-    gain.gain.setValueAtTime(0, ctx.currentTime);
-    gain.gain.linearRampToValueAtTime(0.8, ctx.currentTime + 0.05);
-    // Store ref so we can fade out on release
-    node._audioOsc = osc;
-    node._audioGain = gain;
-    osc.connect(gain); gain.connect(ctx.destination);
-    osc.start();
+    const master = ctx.createGain();
+    master.gain.setValueAtTime(0, ctx.currentTime);
+    master.gain.linearRampToValueAtTime(0.7, ctx.currentTime + 0.08);
+    master.connect(ctx.destination);
+
+    // Two oscillators — slight detune for chorus warmth
+    const osc1 = ctx.createOscillator();
+    const osc2 = ctx.createOscillator();
+    osc1.type = 'triangle'; osc2.type = 'sine';
+    osc1.frequency.value = freq; osc2.frequency.value = freq * 1.002;
+    const g1 = ctx.createGain(); g1.gain.value = 0.5;
+    const g2 = ctx.createGain(); g2.gain.value = 0.3;
+    osc1.connect(g1); g1.connect(master);
+    osc2.connect(g2); g2.connect(master);
+    osc1.start(); osc2.start();
+
+    node._audioOsc = [osc1, osc2];
+    node._audioGain = master;
   }
 
   function stopDragTone(node) {
@@ -138,8 +162,8 @@
       const ctx = getAudio();
       node._audioGain.gain.cancelScheduledValues(ctx.currentTime);
       node._audioGain.gain.setValueAtTime(node._audioGain.gain.value, ctx.currentTime);
-      node._audioGain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + 0.4);
-      node._audioOsc.stop(ctx.currentTime + 0.5);
+      node._audioGain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + 0.6);
+      for (const osc of node._audioOsc) osc.stop(ctx.currentTime + 0.7);
       node._audioOsc = null; node._audioGain = null;
     }
   }
