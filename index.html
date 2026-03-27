@@ -113,7 +113,7 @@
     const x = W * (margin + rng() * (1 - 2 * margin));
     const y = H * (margin + rng() * (1 - 2 * margin));
     const mass = 0.5 + rng() * 2;
-    const tints = [[224,220,212],[224,220,212],[224,220,212],[235,210,180],[180,210,235],[210,190,230]];
+    const tints = [[220,218,214],[210,208,204],[200,198,194],[215,213,209]];
     const tint = tints[Math.floor(rng() * tints.length)];
     nodes.push({
       x, y, px: x, py: y, homeX: x, homeY: y, mass,
