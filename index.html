@@ -25,11 +25,7 @@
 </head>
 <body>
 <canvas id="c"></canvas>
-<nav class="links">
-  <a href="https://nemi.tech" target="_blank" rel="noopener">nemi.tech</a>
-  <span class="dot">&middot;</span>
-  <a href="https://postalviviente.com" target="_blank" rel="noopener">postalviviente.com</a>
-</nav>
+<!-- links are now constellation nodes -->
 <script>
 (function() {
   const canvas = document.getElementById('c');
@@ -127,7 +123,25 @@
       phase: rng() * Math.PI * 2,
       nOff: rng() * 500,
       tint,
-      dragged: false
+      dragged: false,
+      label: null, url: null
+    });
+  }
+
+  // Special project nodes
+  const projects = [
+    { label: 'nemi', url: 'https://nemi.tech', tint: [180,210,235] },
+    { label: 'postal viviente', url: 'https://postalviviente.com', tint: [235,210,180] },
+  ];
+  for (const proj of projects) {
+    const x = W * (0.25 + rng() * 0.5);
+    const y = H * (0.2 + rng() * 0.5);
+    nodes.push({
+      x, y, px: x, py: y, homeX: x, homeY: y,
+      mass: 2.5, r: 5, brightness: 0.8,
+      phase: rng() * Math.PI * 2, nOff: rng() * 500,
+      tint: proj.tint, dragged: false,
+      label: proj.label, url: proj.url
     });
   }
 
@@ -197,11 +211,17 @@
     return best;
   }
 
-  canvas.addEventListener('mousedown', e => { e.preventDefault(); const n = findNode(e.clientX, e.clientY); if (n >= 0) { dragging = n; nodes[n].dragged = true; canvas.style.cursor = 'grabbing'; }});
+  let dragStartX = 0, dragStartY = 0;
+  canvas.addEventListener('mousedown', e => { e.preventDefault(); dragStartX = e.clientX; dragStartY = e.clientY; const n = findNode(e.clientX, e.clientY); if (n >= 0) { dragging = n; nodes[n].dragged = true; canvas.style.cursor = 'grabbing'; }});
   addEventListener('mousemove', e => { mouse.x = e.clientX; mouse.y = e.clientY; mouse.active = true; if (dragging !== null) { nodes[dragging].x = e.clientX; nodes[dragging].y = e.clientY; }});
-  function onRelease() {
+  function onRelease(ex, ey) {
     if (dragging === null) return;
     const n = nodes[dragging];
+    // If barely moved, treat as click — open URL if project node
+    const moved = Math.abs(n.x - dragStartX) + Math.abs(n.y - dragStartY);
+    if (moved < 8 && n.url) {
+      window.open(n.url, '_blank');
+    }
     // Check if dropped near another node — create connection
     for (let j = 0; j < nodes.length; j++) {
       if (j === dragging) continue;
@@ -217,7 +237,7 @@
     canvas.style.cursor = 'crosshair';
   }
   addEventListener('mouseup', onRelease);
-  canvas.addEventListener('touchstart', e => { e.preventDefault(); const t = e.touches[0]; const n = findNode(t.clientX, t.clientY); if (n >= 0) { dragging = n; nodes[n].dragged = true; }}, {passive:false});
+  canvas.addEventListener('touchstart', e => { e.preventDefault(); const t = e.touches[0]; dragStartX = t.clientX; dragStartY = t.clientY; const n = findNode(t.clientX, t.clientY); if (n >= 0) { dragging = n; nodes[n].dragged = true; }}, {passive:false});
   addEventListener('touchmove', e => { if (dragging !== null) { e.preventDefault(); const t = e.touches[0]; mouse.x = t.clientX; mouse.y = t.clientY; nodes[dragging].x = t.clientX; nodes[dragging].y = t.clientY; }}, {passive:false});
   addEventListener('touchend', onRelease);
 
@@ -428,6 +448,13 @@
       // Core
       ctx.beginPath(); ctx.arc(n.x, n.y, n.r, 0, Math.PI*2);
       ctx.fillStyle = 'rgba(' + tr + ',' + tg + ',' + tb + ',' + (p + 0.15) + ')'; ctx.fill();
+      // Label for project nodes
+      if (n.label) {
+        ctx.font = '300 11px Inter, sans-serif';
+        ctx.fillStyle = 'rgba(' + tr + ',' + tg + ',' + tb + ',' + (p * 0.8) + ')';
+        ctx.textAlign = 'center';
+        ctx.fillText(n.label, n.x, n.y + n.r + 16);
+      }
     }
     ctx.restore(); // end parallax offset
 
